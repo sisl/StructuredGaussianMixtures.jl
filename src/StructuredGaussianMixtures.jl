@@ -1,5 +1,15 @@
 module StructuredGaussianMixtures
 
-# Write your package code here.
+using Distributions
+using LinearAlgebra
+using Statistics
 
-end
+include("lrdmvnormal.jl")
+export LRDMvNormal
+
+include("fit.jl")
+export fit
+include("predict.jl")
+export predict, marginal
+
+end # module
