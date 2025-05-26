@@ -92,13 +92,19 @@ function predict(dist::LRDMvNormal, x::AbstractVector, input_indices::Vector{Int
     
     # Compute the conditional covariance structure efficiently
     # For the low-rank part: F₂ * (I - I_plus_FF_inv) * F₂'
-    F₂_cond = F₂ * sqrt.(I - I_plus_FF_inv)
+    # Compute matrix square root using eigendecomposition
+    λ, Q = eigen(I - I_plus_FF_inv)
+    F₂_cond = F₂ * (Q * Diagonal(sqrt.(λ)))
     
     # For the diagonal part: D₂ + diag(F₂ * I_plus_FF_inv * F₂')
     D₂_cond = D₂ + diag(F₂ * (I_plus_FF_inv * F₂'))
     
     # Return the conditional distribution
-    return LRDMvNormal(μ₂₁, F₂_cond, D₂_cond)
+    if length(output_indices) <= dist.rank
+        return MvNormal(μ₂₁, F₂_cond * F₂_cond' + Diagonal(D₂_cond))
+    else
+        return LRDMvNormal(μ₂₁, F₂_cond, D₂_cond)
+    end
 end
 
 """
@@ -134,10 +140,19 @@ Returns a new LRDMvNormal distribution representing the marginal.
 - A new LRDMvNormal distribution representing the marginal
 """
 function marginal(dist::LRDMvNormal, indices::Vector{Int})
+    
     μ = dist.μ[indices]
-    F = dist.F[indices, :]
-    D = dist.D[indices]
-    return LRDMvNormal(μ, F, D)
+
+    # If the number of indices is less than or equal to the rank, use full rank
+    if length(indices) <= dist.rank
+        # Compute the full covariance matrix for the marginal
+        Σ = dist.F[indices, :] * dist.F[indices, :]' + Diagonal(dist.D[indices])
+        return MvNormal(μ, Σ)
+    else
+        F = dist.F[indices, :]
+        D = dist.D[indices]
+        return LRDMvNormal(μ, F, D)
+    end
 end
 
 """
@@ -169,7 +184,7 @@ function predict(dist::MultivariateMixture, x::AbstractVector, input_indices::Ve
     end
     
     # Compute new weights using softmax
-    log_weights = log.(dist.prior) .+ log_densities
+    log_weights = log.(probs(dist.prior)) .+ log_densities
     log_weights .-= maximum(log_weights)  # For numerical stability
     new_weights = exp.(log_weights)
     new_weights ./= sum(new_weights)
@@ -183,8 +198,8 @@ end
 
 """
     predict(dist::Union{MvNormal,LRDMvNormal,MultivariateMixture}, x::AbstractVector; 
-           input_indices::Vector{Int} = 1:length(x), 
-           output_indices::Vector{Int} = length(x)+1:length(mean(dist)))
+           input_indices::Union{Vector{Int},AbstractRange} = 1:length(x), 
+           output_indices::Union{Vector{Int},AbstractRange} = length(x)+1:length(mean(dist)))
 
 Compute the conditional distribution of the output indices given the input indices using the Schur complement.
 Returns a new distribution representing the conditional distribution.
@@ -199,7 +214,10 @@ Returns a new distribution representing the conditional distribution.
 - A new distribution representing the conditional distribution
 """
 function predict(dist::Union{MvNormal,LRDMvNormal,MultivariateMixture}, x::AbstractVector; 
-                input_indices::Vector{Int} = 1:length(x), 
-                output_indices::Vector{Int} = length(x)+1:length(mean(dist)))
-    return predict(dist, x, collect(input_indices), collect(output_indices))
+                input_indices::Union{Vector{Int},AbstractRange} = 1:length(x), 
+                output_indices::Union{Vector{Int},AbstractRange} = length(x)+1:length(mean(dist)))
+    # Convert ranges to vectors if needed
+    input_indices_vec = collect(input_indices)
+    output_indices_vec = collect(output_indices)
+    return predict(dist, x, input_indices_vec, output_indices_vec)
 end
