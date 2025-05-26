@@ -10,9 +10,9 @@ This package implements three `GMMFitMethod`s.
 
 - **PCAEM**: Fit a GMM in PCA-reduced space and transforms back to the original space, effectively learning low-rank covariance structures through dimensionality reduction. 
 
-- **FactorAnalysisEM**: Fit a mixture of factor analyzers [under construction]. Directly fit GMMs with covariance matrices constrained to the form $Σ = FF' + D$, where F is a low-rank factor matrix and D is diagonal, relying on an internal EM step for factor analysis. This method is particularly effective for high-dimensional data where the number of features exceeds the number of samples.
+- **FactorEM**: Fit a mixture of factor analyzers [under construction]. Directly fit GMMs with covariance matrices constrained to the form $Σ = FF' + D$, where F is a low-rank factor matrix and D is diagonal, relying on an internal EM step for factor analysis. This method is particularly effective for high-dimensional data where the number of features exceeds the number of samples.
 
-To perform fitting and prediction efficiently, `PCAEM` and `FactorAnalysisEM` rely on an `LRDMvNormal <: Distributions.AbstractMvNormal` class that this packages introduces to represent structured covariance matrices $Σ = FF' + D$ using their factor loadings and diagonal vectors.
+To perform fitting and prediction efficiently, `PCAEM` and `FactorEM` rely on an `LRDMvNormal <: Distributions.AbstractMvNormal` class that this packages introduces to represent structured covariance matrices $Σ = FF' + D$ using their factor loadings and diagonal vectors.
 
 ### Usage
 
