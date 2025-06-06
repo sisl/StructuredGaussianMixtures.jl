@@ -160,11 +160,16 @@ Directly fits a mixture of low-rank plus diagonal Gaussian distributions.
 struct FactorEM <: GMMFitMethod
     n_components::Int
     rank::Int
-    gmm_method::Symbol
-    gmm_nInit::Int
-    gmm_nIter::Int
-    gmm_nFinal::Int
+    initialization_method::Symbol # :kmeans, :rand
+    nInit::Int # number of initializations for the GMM
+    nIter::Int # number of EM iterations for the GMM
+    nInternalIter::Int # number of EM iterations for the internal factor analysis
 end
+FactorEM(n_components::Int, rank::Int; 
+    initialization_method::Symbol=:kmeans, 
+    nInit::Int=1, 
+    nIter::Int=10, 
+    nInternalIter::Int=10)
 
 """
     fit(fitmethod::FactorEM, x::Matrix)
@@ -185,5 +190,164 @@ This method directly fits a mixture of low-rank plus diagonal Gaussian distribut
 - Not yet implemented
 """
 function fit(fitmethod::FactorEM, x::Matrix)
-    error("Not implemented")
+    best_ll = -Inf
+    best_gmm = nothing
+    for i in 1:fitmethod.nInit
+        gmm = initialize_gmm(fitmethod.initialization_method, fitmethod.n_components, fitmethod.rank, x)
+
+        # run EM
+        for j in 1:fitmethod.nIter
+
+            # E-step
+            log_resp = e_step(gmm, x)
+
+            # M-step
+            m_step!(gmm, log_resp; nInternalIter=fitmethod.nInternalIter)
+        end
+
+        # compute final logprobs to return the best fit
+        lls = [logprob(gmm, x[i, :]) for i in 1:size(x, 1)]
+        ll = mean(lls)
+        if ll > best_ll
+            best_ll = ll
+            best_gmm = gmm
+        end
+    end
+
+    return best_gmm
+end
+
+function initialize_gmm(method::Symbol, n_components::Int, rank::Int, x::Matrix)
+    n_samples, n_features = size(x)
+    if method == :kmeans
+        # Run k-means on x
+        kmeans_result = kmeans(x', n_components)
+        assignments = assignments(kmeans_result)
+        centers = kmeans_result.centers'
+        
+        # Initialize components
+        components = Vector{LRDMvNormal}(undef, n_components)
+        weights = zeros(n_components)
+        
+        for k in 1:n_components
+            # Get data points in this cluster
+            cluster_mask = assignments .== k
+            cluster_data = x[cluster_mask, :]
+            
+            if isempty(cluster_data)
+                # If cluster is empty, use small random initialization
+                μ = centers[:, k]
+                F = 0.01 * randn(n_features, rank)
+                D = 0.01 * ones(n_features)
+            else
+                # Compute mean and variance for this cluster
+                μ = mean(cluster_data, dims=1)[:]
+                D = var(cluster_data, dims=1)[:]
+                
+                # Initialize low-rank factor with small random values
+                F = 0.01 * randn(n_features, rank)
+            end
+            
+            components[k] = LRDMvNormal(μ, F, D)
+            weights[k] = count(cluster_mask) / n_samples
+        end
+        
+        return MixtureModel(components, weights)
+    elseif method == :rand
+        # Choose n_components random rows of x as means
+        rows = rand(1:n_samples, n_components)
+        means = x[rows, :]
+        
+        # Initialize components with random low-rank structure
+        components = Vector{LRDMvNormal}(undef, n_components)
+        for k in 1:n_components
+            μ = means[k, :]
+            F = 0.01 * randn(n_features, rank)
+            D = 0.01 * ones(n_features)
+            components[k] = LRDMvNormal(μ, F, D)
+        end
+        
+        # Use uniform weights
+        weights = ones(n_components) / n_components
+        return MixtureModel(components, weights)
+    else
+        throw(ArgumentError("Invalid initialization method: $method"))
+    end
+end
+
+
+function e_step(gmm::MixtureModel, x::Matrix)
+    n_samples, n_features = size(x)
+    n_components = length(components(gmm))
+    log_resp = Matrix{eltype(x)}(undef, n_samples, n_components)
+    for i in 1:n_samples
+        for j in 1:n_components
+            log_resp[i, j] = logpdf(components(gmm)[j], x[i, :]) + log(gmm.weights[j])
+        end
+    end
+    return log_resp
+end
+
+
+function m_step!(gmm::MixtureModel, log_resp::Matrix; nInternalIter::Int=10)
+    n_samples, n_components = size(log_resp)
+    n_features = length(components(gmm)[1].μ)
+    
+    # Convert log responsibilities to responsibilities
+    resp = exp.(log_resp)
+    
+    # Update weights
+    gmm.weights .= mean(resp, dims=1)
+    
+    # Update means and covariance structure for each component
+    for j in 1:n_components
+        comp = components(gmm)[j]
+        weights = resp[:, j]
+        sum_weights = sum(weights)
+        
+        # Update mean in-place
+        μ = mean(weights .* x, dims=1)[:] / sum_weights
+        comp.μ .= μ
+        
+        # Compute residuals
+        r = x .- μ'
+        
+        # Compute weighted residual covariance diagonal
+        C_r = sum(weights .* (r .^ 2), dims=1)[:] / sum_weights
+        
+        # Initialize D to residual covariance diagonal
+        D = comp.D
+        D .= C_r
+        
+        # Initialize F to previous value (or clipped identity if first iteration)
+        F = comp.F
+        if all(iszero, F)
+            F .= 0.1 * Matrix{Float64}(I, n_features, size(F, 2))
+        end
+        
+        # Inner EM iterations for F and D
+        for iter in 1:nInternalIter
+            # Inner E-step
+            # Compute G = (F'D^-1F + I)^-1
+            G = inv(F' * (D .\ F) + I)
+            
+            # Compute expected latent variables s
+            s = zeros(n_samples, size(F, 2))
+            for i in 1:n_samples
+                s[i, :] = G * F' * (D .\ r[i, :])
+            end
+            
+            # Compute weighted expectations
+            C_rs = sum(weights .* (r .* s), dims=1)[:] / sum_weights
+            C_ss = sum(weights .* (s .* s), dims=1)[:] / sum_weights + G
+            
+            # Inner M-step
+            # Update F
+            F_new = C_rs * inv(C_ss)
+            F .= F_new
+            
+            # Update D
+            D .= C_r + diag(F * C_ss * F' - 2 * C_rs * F')
+        end
+    end
 end
