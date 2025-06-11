@@ -20,6 +20,10 @@ function compare_methods_pca(true_gmm, n_components, n_rank; run_pca=true, n_sam
     gmm_pca = StructuredGaussianMixtures.fit(fitmethod, data)
     gmm_pca_samples = rand(gmm_pca, n_samples)
 
+    # Fit using FactorEM
+    fitmethod = FactorEM(n_components, n_rank; initialization_method=:rand)
+    gmm_factor = StructuredGaussianMixtures.fit(fitmethod, data)
+    gmm_factor_samples = rand(gmm_factor, n_samples)
 
     # plot samples from the three models
     if run_pca
@@ -27,6 +31,7 @@ function compare_methods_pca(true_gmm, n_components, n_rank; run_pca=true, n_sam
         data = transform(pca, data)
         gmm_full_samples = transform(pca, gmm_full_samples)   
         gmm_pca_samples = transform(pca, gmm_pca_samples)   
+        gmm_factor_samples = transform(pca, gmm_factor_samples)
     end
 
     # Create scatter plots of the three models
@@ -41,9 +46,12 @@ function compare_methods_pca(true_gmm, n_components, n_rank; run_pca=true, n_sam
     p3 = scatter(gmm_pca_samples[1, :], gmm_pca_samples[2, :], 
                 alpha=0.6, title="PCAEM Model", xlabel=xlabel, ylabel=ylabel, 
                 label="PCAEM samples", markersize=2, margin=5Plots.mm)
+    p4 = scatter(gmm_factor_samples[1, :], gmm_factor_samples[2, :], 
+                alpha=0.6, title="FactorEM Model", xlabel=xlabel, ylabel=ylabel, 
+                label="FactorEM samples", markersize=2, margin=5Plots.mm)
 
     # Combine all plots
-    return plot(p1, p2, p3, layout=(1, 3), size=(1200, 400))
+    return plot(p1, p2, p3, p4, layout=(1, 4), size=(1600, 400))
 end
 
 # Full-rank 2D GMM with potentially overlapping components
@@ -57,6 +65,11 @@ true_Ls = [randn(n_features, n_features) for _ in 1:n_components]
 true_covs = [true_Ls[i] * true_Ls[i]' for i in 1:n_components]
 true_gmm = MixtureModel(MvNormal.(true_means, true_covs), true_probs)
 compare_methods_pca(true_gmm, n_components, n_rank; run_pca=false)
+
+
+data = rand(true_gmm, 1000)
+StructuredGaussianMixtures.initialize_gmm(:rand, n_components, n_rank, data)
+
 
 # Low-Rank GMM with tied component ranks
 n_rank = 2

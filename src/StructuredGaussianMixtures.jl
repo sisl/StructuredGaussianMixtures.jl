@@ -1,3 +1,5 @@
+__precompile__(false)
+
 module StructuredGaussianMixtures
 
 using Distributions
@@ -7,6 +9,7 @@ using Random
 using MultivariateStats: PCA, fit as pca_fit, transform, reconstruct, projection, mean
 using GaussianMixtures
 import GaussianMixtures: covar
+using Clustering
 
 ## conversion to MixtureModel since GaussianMixtures.jl fails for d=1
 function Distributions.MixtureModel(gmm::GMM{T}) where {T<:AbstractFloat}
