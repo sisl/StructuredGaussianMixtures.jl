@@ -250,7 +250,7 @@ function initialize_gmm(method::Symbol, n_components::Int, rank::Int, x::Matrix;
             if isempty(cluster_data)
                 # If cluster is empty, use small random initialization
                 μ = centers[:, k]
-                F = epsilon * randn(n_features, rank)
+                F = zeros(n_features, rank)
                 D = global_var
             else
                 # Compute mean and variance for this cluster
@@ -258,7 +258,7 @@ function initialize_gmm(method::Symbol, n_components::Int, rank::Int, x::Matrix;
                 D = var(cluster_data, dims=2)[:]
                 
                 # Initialize low-rank factor with small random values
-                F = epsilon * randn(n_features, rank)
+                F = zeros(n_features, rank)
             end
             components[k] = LRDMvNormal(μ, F, D)
             weights[k] = count(cluster_mask) / n_samples
@@ -274,7 +274,7 @@ function initialize_gmm(method::Symbol, n_components::Int, rank::Int, x::Matrix;
         components = Vector{LRDMvNormal}(undef, n_components)
         for k in 1:n_components
             μ = means[:, k]
-            F = epsilon * randn(n_features, rank)
+            F = zeros(n_features, rank)
             D = global_var
             components[k] = LRDMvNormal(μ, F, D)
         end
