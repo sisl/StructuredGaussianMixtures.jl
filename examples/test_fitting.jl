@@ -7,22 +7,33 @@ using Statistics
 using StructuredGaussianMixtures
 using Plots
 
+function mc_kl(p, q, n_samples=10000)
+    samples = rand(p, n_samples)
+    log_p = logpdf(p, samples)
+    log_q = logpdf(q, samples)
+    return mean(log_p .- log_q)
+end
+mc_jsd(p, q, n_samples=10000) = 0.5*(mc_kl(p, q, n_samples) + mc_kl(q, p, n_samples))
+
 function compare_methods_pca(true_gmm, n_components, n_rank; run_pca=true, n_samples=1000)
     data = rand(true_gmm, n_samples)
 
     # Fit using EM
+    @info "Fitting EM model"
     fitmethod = EM(n_components)
-    gmm_full = StructuredGaussianMixtures.fit(fitmethod, data)
+    @time gmm_full = StructuredGaussianMixtures.fit(fitmethod, data)
     gmm_full_samples = rand(gmm_full, n_samples)
 
     # Fit using PCAEM
+    @info "Fitting PCAEM model"
     fitmethod = PCAEM(n_components, n_rank)
-    gmm_pca = StructuredGaussianMixtures.fit(fitmethod, data)
+    @time gmm_pca = StructuredGaussianMixtures.fit(fitmethod, data)
     gmm_pca_samples = rand(gmm_pca, n_samples)
 
     # Fit using FactorEM
+    @info "Fitting FactorEM model"
     fitmethod = FactorEM(n_components, n_rank; initialization_method=:rand)
-    gmm_factor = StructuredGaussianMixtures.fit(fitmethod, data)
+    @time gmm_factor = StructuredGaussianMixtures.fit(fitmethod, data)
     gmm_factor_samples = rand(gmm_factor, n_samples)
 
     # plot samples from the three models
@@ -33,6 +44,11 @@ function compare_methods_pca(true_gmm, n_components, n_rank; run_pca=true, n_sam
         gmm_pca_samples = transform(pca, gmm_pca_samples)   
         gmm_factor_samples = transform(pca, gmm_factor_samples)
     end
+
+    # print the JSD between the true model and the three models
+    println("EM JSD: ", mc_jsd(true_gmm, gmm_full))
+    println("PCAEM JSD: ", mc_jsd(true_gmm, gmm_pca))
+    println("FactorEM JSD: ", mc_jsd(true_gmm, gmm_factor))
 
     # Create scatter plots of the three models
     xlabel = run_pca ? "PC1" : "Feature 1"
@@ -65,11 +81,6 @@ true_Ls = [randn(n_features, n_features) for _ in 1:n_components]
 true_covs = [true_Ls[i] * true_Ls[i]' for i in 1:n_components]
 true_gmm = MixtureModel(MvNormal.(true_means, true_covs), true_probs)
 compare_methods_pca(true_gmm, n_components, n_rank; run_pca=false)
-
-
-data = rand(true_gmm, 1000)
-StructuredGaussianMixtures.initialize_gmm(:rand, n_components, n_rank, data)
-
 
 # Low-Rank GMM with tied component ranks
 n_rank = 2

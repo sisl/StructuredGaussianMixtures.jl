@@ -298,6 +298,10 @@ function e_step(gmm::MixtureModel, x::Matrix)
             log_resp[i, j] = logpdf(components(gmm)[j], x[:,i]) + log_weights[j]
         end
     end
+    
+    # Normalize log responsibilities in a numerically stable way
+    max_logs = maximum(log_resp, dims=2)
+    log_resp .-= max_logs .+ log.(sum(exp.(log_resp .- max_logs), dims=2))
     return log_resp
 end
 
