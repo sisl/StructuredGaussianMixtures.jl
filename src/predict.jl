@@ -1,5 +1,5 @@
 """
-    predict(dist::MvNormal, x::AbstractVector, input_indices::Vector{Int}, output_indices::Vector{Int})
+    predict(dist::MvNormal, x::AbstractVector, input_indices::Union{Vector{Int},AbstractRange}, output_indices::Union{Vector{Int},AbstractRange})
 
 Compute the conditional distribution of the output indices given the input indices using the Schur complement.
 Returns a new MvNormal distribution representing the conditional distribution.
@@ -13,7 +13,7 @@ Returns a new MvNormal distribution representing the conditional distribution.
 # Returns
 - A new MvNormal distribution representing the conditional distribution
 """
-function predict(dist::MvNormal, x::AbstractVector, input_indices::Vector{Int}, output_indices::Vector{Int})
+function predict(dist::MvNormal, x::AbstractVector, input_indices::Union{Vector{Int},AbstractRange}, output_indices::Union{Vector{Int},AbstractRange})
     # Get the full mean and covariance
     μ = mean(dist)
     Σ = cov(dist)
@@ -44,7 +44,7 @@ function predict(dist::MvNormal, x::AbstractVector, input_indices::Vector{Int}, 
 end
 
 """
-    predict(dist::LRDMvNormal, x::AbstractVector, input_indices::Vector{Int}, output_indices::Vector{Int})
+    predict(dist::LRDMvNormal, x::AbstractVector, input_indices::Union{Vector{Int},AbstractRange}, output_indices::Union{Vector{Int},AbstractRange})
 
 Compute the conditional distribution of the output indices given the input indices using the Schur complement.
 Returns a new LRDMvNormal distribution representing the conditional distribution.
@@ -59,7 +59,7 @@ This implementation is efficient for low-rank plus diagonal covariance structure
 # Returns
 - A new LRDMvNormal distribution representing the conditional distribution
 """
-function predict(dist::LRDMvNormal, x::AbstractVector, input_indices::Vector{Int}, output_indices::Vector{Int})
+function predict(dist::LRDMvNormal, x::AbstractVector, input_indices::Union{Vector{Int},AbstractRange}, output_indices::Union{Vector{Int},AbstractRange})
     d = length(dist.μ)
     
     # Verify indices are valid
@@ -108,7 +108,7 @@ function predict(dist::LRDMvNormal, x::AbstractVector, input_indices::Vector{Int
 end
 
 """
-    marginal(dist::MvNormal, indices::Vector{Int})
+    marginal(dist::MvNormal, indices::Union{Vector{Int},AbstractRange})
 
 Compute the marginal distribution over the specified indices.
 Returns a new MvNormal distribution representing the marginal.
@@ -120,14 +120,14 @@ Returns a new MvNormal distribution representing the marginal.
 # Returns
 - A new MvNormal distribution representing the marginal
 """
-function marginal(dist::MvNormal, indices::Vector{Int})
+function marginal(dist::MvNormal, indices::Union{Vector{Int},AbstractRange})
     μ = mean(dist)[indices]
     Σ = cov(dist)[indices, indices]
     return MvNormal(μ, Σ)
 end
 
 """
-    marginal(dist::LRDMvNormal, indices::Vector{Int})
+    marginal(dist::LRDMvNormal, indices::Union{Vector{Int},AbstractRange})
 
 Compute the marginal distribution over the specified indices.
 Returns a new LRDMvNormal distribution representing the marginal.
@@ -139,7 +139,7 @@ Returns a new LRDMvNormal distribution representing the marginal.
 # Returns
 - A new LRDMvNormal distribution representing the marginal
 """
-function marginal(dist::LRDMvNormal, indices::Vector{Int})
+function marginal(dist::LRDMvNormal, indices::Union{Vector{Int},AbstractRange})
     
     μ = dist.μ[indices]
 
@@ -156,7 +156,7 @@ function marginal(dist::LRDMvNormal, indices::Vector{Int})
 end
 
 """
-    predict(dist::MultivariateMixture, x::AbstractVector, input_indices::Vector{Int}, output_indices::Vector{Int})
+    predict(dist::MultivariateMixture, x::AbstractVector, input_indices::Union{Vector{Int},AbstractRange}, output_indices::Union{Vector{Int},AbstractRange})
 
 Compute the conditional distribution of the output indices given the input indices for a mixture model.
 Returns a new mixture model where each component is the conditional distribution of the corresponding component,
@@ -171,7 +171,7 @@ and the weights are updated based on the log density of x under the marginal dis
 # Returns
 - A new mixture model representing the conditional distribution
 """
-function predict(dist::MultivariateMixture, x::AbstractVector, input_indices::Vector{Int}, output_indices::Vector{Int})
+function predict(dist::MultivariateMixture, x::AbstractVector, input_indices::Union{Vector{Int},AbstractRange}, output_indices::Union{Vector{Int},AbstractRange})
     # Get the number of components
     n_components = length(dist.components)
     

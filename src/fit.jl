@@ -26,13 +26,17 @@ struct EM <: GMMFitMethod
     nInit::Int
     nIter::Int
     nFinal::Int
-end
-EM(n_components::Int; 
+
+    function EM(n_components::Int; 
     method::Symbol=:kmeans, 
     kind::Symbol=:full, 
     nInit::Int=50, 
     nIter::Int=10, 
-    nFinal::Int=nIter) = EM(n_components, method, kind, nInit, nIter, nFinal)
+    nFinal::Int=nIter)
+        new(n_components, method, kind, nInit, nIter, nFinal)
+    end
+end
+
 
 """
     fit(fitmethod::EM, x::Matrix)
@@ -78,13 +82,17 @@ struct PCAEM <: GMMFitMethod
     gmm_nInit::Int
     gmm_nIter::Int
     gmm_nFinal::Int
-end
-PCAEM(n_components::Int, rank::Int; 
+    
+    function PCAEM(n_components::Int, rank::Int; 
     gmm_method::Symbol=:kmeans, 
     gmm_kind::Symbol=:full, 
     gmm_nInit::Int=50, 
     gmm_nIter::Int=10, 
-    gmm_nFinal::Int=gmm_nIter) = PCAEM(n_components, rank, gmm_method, gmm_kind, gmm_nInit, gmm_nIter, gmm_nFinal)
+    gmm_nFinal::Int=gmm_nIter)
+        new(n_components, rank, gmm_method, gmm_kind, gmm_nInit, gmm_nIter, gmm_nFinal)
+    end
+end
+
     
 """
     fit(fitmethod::PCAEM, x::Matrix)
@@ -160,11 +168,20 @@ Directly fits a mixture of low-rank plus diagonal Gaussian distributions.
 struct FactorEM <: GMMFitMethod
     n_components::Int
     rank::Int
-    gmm_method::Symbol
-    gmm_nInit::Int
-    gmm_nIter::Int
-    gmm_nFinal::Int
+    initialization_method::Symbol # :kmeans, :rand
+    nInit::Int # number of initializations for the GMM
+    nIter::Int # number of EM iterations for the GMM
+    nInternalIter::Int # number of EM iterations for the internal factor analysis
+
+    function FactorEM(n_components::Int, rank::Int; 
+        initialization_method::Symbol=:kmeans, 
+        nInit::Int=1, 
+        nIter::Int=10, 
+        nInternalIter::Int=10)
+        new(n_components, rank, initialization_method, nInit, nIter, nInternalIter)
+    end
 end
+
 
 """
     fit(fitmethod::FactorEM, x::Matrix)
@@ -185,5 +202,185 @@ This method directly fits a mixture of low-rank plus diagonal Gaussian distribut
 - Not yet implemented
 """
 function fit(fitmethod::FactorEM, x::Matrix)
-    error("Not implemented")
+    best_ll = -Inf
+    best_gmm = nothing
+    for i in 1:fitmethod.nInit
+        gmm = initialize_gmm(fitmethod.initialization_method, fitmethod.n_components, fitmethod.rank, x)
+
+        # run EM
+        for j in 1:fitmethod.nIter
+
+            # E-step
+            log_resp = e_step(gmm, x)
+
+            # M-step
+            m_step!(gmm, x, log_resp; nInternalIter=fitmethod.nInternalIter)
+        end
+
+        # compute final logprobs to return the best fit
+        lls = [logpdf(gmm, x[:,i]) for i in 1:size(x, 2)]
+        ll = mean(lls)
+        if ll > best_ll
+            best_ll = ll
+            best_gmm = gmm
+        end
+    end
+
+    return best_gmm
+end
+
+function initialize_gmm(method::Symbol, n_components::Int, rank::Int, x::Matrix; epsilon::Float64=0.01)
+    n_features, n_samples = size(x)
+    global_var = var(x, dims=2)[:]
+    if method == :kmeans
+        # Run k-means on x
+        kmeans_result = kmeans(x, n_components)
+        assigns = assignments(kmeans_result)
+        centers = kmeans_result.centers
+        
+        # Initialize components
+        components = Vector{LRDMvNormal}(undef, n_components)
+        weights = zeros(n_components)
+        
+        for k in 1:n_components
+            # Get data points in this cluster
+            cluster_mask = assigns .== k
+            cluster_data = x[:, cluster_mask]
+            
+            if isempty(cluster_data)
+                # If cluster is empty, use small random initialization
+                μ = centers[:, k]
+                F = zeros(n_features, rank)
+                D = global_var
+            else
+                # Compute mean and variance for this cluster
+                μ = mean(cluster_data, dims=2)[:]
+                D = var(cluster_data, dims=2)[:]
+                
+                # Initialize low-rank factor with small random values
+                F = zeros(n_features, rank)
+            end
+            components[k] = LRDMvNormal(μ, F, D)
+            weights[k] = count(cluster_mask) / n_samples
+        end
+        
+        return MixtureModel(components, weights)
+    elseif method == :rand
+        # Choose n_components random rows of x as means
+        rows = rand(1:n_samples, n_components)
+        means = x[:,rows]
+        
+        # Initialize components with random low-rank structure
+        components = Vector{LRDMvNormal}(undef, n_components)
+        for k in 1:n_components
+            μ = means[:, k]
+            F = zeros(n_features, rank)
+            D = global_var
+            components[k] = LRDMvNormal(μ, F, D)
+        end
+        
+        # Use uniform weights
+        weights = ones(n_components) / n_components
+        return MixtureModel(components, weights)
+    else
+        throw(ArgumentError("Invalid initialization method: $method"))
+    end
+end
+
+
+function e_step(gmm::MixtureModel, x::Matrix)
+    n_features, n_samples = size(x)
+    n_components = length(components(gmm))
+    log_resp = Matrix{eltype(x)}(undef, n_samples, n_components)
+    for i in 1:n_samples
+        log_weights = log.(probs(gmm))
+        for j in 1:n_components
+            log_resp[i, j] = logpdf(components(gmm)[j], x[:,i]) + log_weights[j]
+        end
+    end
+    
+    # Normalize log responsibilities in a numerically stable way
+    max_logs = maximum(log_resp, dims=2)
+    log_resp .-= max_logs .+ log.(sum(exp.(log_resp .- max_logs), dims=2))
+    return log_resp
+end
+
+
+function m_step!(gmm::MixtureModel, x::Matrix, log_resp::Matrix; nInternalIter::Int=10)
+    n_samples, n_components = size(log_resp)
+    n_features = length(components(gmm)[1].μ)
+    
+    # Convert log responsibilities to responsibilities
+    resp = exp.(log_resp)
+    
+    # Update weights
+    gmm.prior.p .= mean(resp, dims=1)[:]
+    
+    # Update means and covariance structure for each component
+    for j in 1:n_components
+        comp = components(gmm)[j]
+        weights = resp[:, j]
+        sum_weights = sum(weights)
+        # Update mean in-place
+        μ = sum(weights' .* x, dims=2)[:] / sum_weights
+        gmm.components[j].μ .= μ
+        
+        # Compute residuals
+        r = x .- μ
+        
+        # Compute weighted residual covariance diagonal
+        C_r = sum(weights' .* (r.^2), dims=2)[:] / sum_weights
+        
+        # Initialize D to residual covariance diagonal
+        D = deepcopy(C_r)
+        
+        # Initialize F to previous value (or clipped identity if first iteration)
+        F = comp.F
+        if all(iszero, F)
+            F .= 0.1 * Matrix{Float64}(I, n_features, size(F, 2))
+        end
+        
+        # Inner EM iterations for F and D
+        for iter in 1:nInternalIter
+            # Inner E-step
+            # Compute G = (F'D^-1F + I)^-1
+            G = nothing
+            try
+                G = inv(F' * ( 1 ./ D  .* F) + I)
+            catch
+                println("iter: $iter")
+                println("Error in E-step: $(F' * ( 1 ./ D  .* F) + I)")
+                println("C_r: $(C_r)")
+                println("sum(weights): $(sum(weights))")
+                println("weights: $(weights)")
+                println("μ: $(μ)")
+                println("norm(r): $([norm(r[:,i]) for i in 1:n_samples])")
+                println("||C_rs||: $(norm(C_rs))")
+                println("||C_ss||: $(norm(C_ss))")
+                println("size(C_rs): $(size(C_rs))")
+                println("size(C_ss): $(size(C_ss))")
+                println("F: $(F)")
+                println("D: $(D)")
+                throw(ArgumentError("Error in E-step: $(F' * ( 1 ./ D  .* F) + I)"))
+            end
+            
+            # Compute expected latent variables s
+            s = G * F' * ((1 ./ D) .* r)
+            
+            # Compute weighted expectations
+            C_rs = (weights' .* r) * s' / sum_weights
+            C_ss = (weights' .* s) * s' / sum_weights + G
+            
+            # Inner M-step
+            # Update F
+            F .= C_rs * inv(C_ss)
+            
+            # Update D
+            D .= C_r + sum((F * C_ss) .* F, dims=2)[:] - 2 * sum(C_rs .* F, dims=2)[:]
+        end
+
+        # Update the component
+        gmm.components[j].F .= F
+        gmm.components[j].D .= D
+    end
 end
