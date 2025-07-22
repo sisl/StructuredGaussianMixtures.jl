@@ -5,6 +5,7 @@ Abstract type for Gaussian Mixture Model fitting methods.
 """
 abstract type GMMFitMethod end
 fit(gmmfit::GMMFitMethod, x::Matrix) = throw(MethodError(fit, (gmmfit, x)))
+fit(gmmfit::GMMFitMethod, x::Matrix, weights::Vector) = throw(MethodError(fit, (gmmfit, x, weights)))
 
 """
     EM
@@ -201,7 +202,9 @@ This method directly fits a mixture of low-rank plus diagonal Gaussian distribut
 - More computationally intensive than PCAEM but potentially more accurate
 - Not yet implemented
 """
-function fit(fitmethod::FactorEM, x::Matrix)
+fit(fitmethod::FactorEM, x::Matrix) = fit(fitmethod, x, ones(size(x, 2)) / size(x, 2))
+function fit(fitmethod::FactorEM, x::Matrix, weights::Vector)
+    norm_weights = weights ./ sum(weights)
     best_ll = -Inf
     best_gmm = nothing
     for i in 1:fitmethod.nInit
@@ -214,12 +217,12 @@ function fit(fitmethod::FactorEM, x::Matrix)
             log_resp = e_step(gmm, x)
 
             # M-step
-            m_step!(gmm, x, log_resp; nInternalIter=fitmethod.nInternalIter)
+            m_step!(gmm, x, log_resp, norm_weights; nInternalIter=fitmethod.nInternalIter)
         end
 
         # compute final logprobs to return the best fit
-        lls = [logpdf(gmm, x[:,i]) for i in 1:size(x, 2)]
-        ll = mean(lls)
+        lls = logpdf(gmm, x)
+        ll = lls' * norm_weights
         if ll > best_ll
             best_ll = ll
             best_gmm = gmm
@@ -306,20 +309,20 @@ function e_step(gmm::MixtureModel, x::Matrix)
 end
 
 
-function m_step!(gmm::MixtureModel, x::Matrix, log_resp::Matrix; nInternalIter::Int=10)
+function m_step!(gmm::MixtureModel, x::Matrix, log_resp::Matrix, point_weights::Vector; nInternalIter::Int=10)
     n_samples, n_components = size(log_resp)
     n_features = length(components(gmm)[1].μ)
     
     # Convert log responsibilities to responsibilities
     resp = exp.(log_resp)
     
-    # Update weights
-    gmm.prior.p .= mean(resp, dims=1)[:]
+    # Update mixture weights
+    gmm.prior.p .= resp' * point_weights
     
     # Update means and covariance structure for each component
     for j in 1:n_components
         comp = components(gmm)[j]
-        weights = resp[:, j]
+        weights = resp[:, j] .* point_weights
         sum_weights = sum(weights)
         # Update mean in-place
         μ = sum(weights' .* x, dims=2)[:] / sum_weights
@@ -344,26 +347,8 @@ function m_step!(gmm::MixtureModel, x::Matrix, log_resp::Matrix; nInternalIter::
         for iter in 1:nInternalIter
             # Inner E-step
             # Compute G = (F'D^-1F + I)^-1
-            G = nothing
-            try
-                G = inv(F' * ( 1 ./ D  .* F) + I)
-            catch
-                println("iter: $iter")
-                println("Error in E-step: $(F' * ( 1 ./ D  .* F) + I)")
-                println("C_r: $(C_r)")
-                println("sum(weights): $(sum(weights))")
-                println("weights: $(weights)")
-                println("μ: $(μ)")
-                println("norm(r): $([norm(r[:,i]) for i in 1:n_samples])")
-                println("||C_rs||: $(norm(C_rs))")
-                println("||C_ss||: $(norm(C_ss))")
-                println("size(C_rs): $(size(C_rs))")
-                println("size(C_ss): $(size(C_ss))")
-                println("F: $(F)")
-                println("D: $(D)")
-                throw(ArgumentError("Error in E-step: $(F' * ( 1 ./ D  .* F) + I)"))
-            end
-            
+            G = inv(F' * ( 1 ./ D  .* F) + I)
+
             # Compute expected latent variables s
             s = G * F' * ((1 ./ D) .* r)
             
