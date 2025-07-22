@@ -84,12 +84,12 @@ function Distributions.logpdf(d::LRDMvNormal, x::AbstractVector)
     # det(F*F' + D) = det(D) * det(I + F'*D^(-1)*F)
     logdet_cov = sum(log.(d.D)) + logdet(I_plus_FF)
     
-    # Compute the quadratic form
-    # TODO: Solve this more efficiently with block elimination
-    precision = Diagonal(D_inv) - 
-                (F_scaled * (I_plus_FF \ F_scaled')) .* sqrt.(D_inv * D_inv')
-    quad_form = dot(x_centered, precision * x_centered)
-    
+    # Compute the quadratic form efficiently with block elimination
+    # quad_form = dot(x_centered, precision * x_centered)
+    y = (I_plus_FF \ F_scaled') * (sqrt.(D_inv) .* x_centered)
+    eta = D_inv .* (x_centered - d.F * y)
+    quad_form = dot(x_centered, eta)
+
     # Return the log PDF
     return -0.5 * (length(d.μ) * log(2π) + logdet_cov + quad_form)
 end
