@@ -24,7 +24,7 @@ function Distributions.MixtureModel(gmm::GMM{T}) where {T<:AbstractFloat}
 end
 
 include("lrdmvnormal.jl")
-export LRDMvNormal
+export LRDMvNormal, rank, low_rank_factor, diagonal
 
 include("fit.jl")
 export fit, GMMFitMethod, EM, PCAEM, FactorEM
