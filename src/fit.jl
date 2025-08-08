@@ -203,6 +203,25 @@ This method directly fits a mixture of low-rank plus diagonal Gaussian distribut
 - Not yet implemented
 """
 fit(fitmethod::FactorEM, x::Matrix) = fit(fitmethod, x, ones(size(x, 2)) / size(x, 2))
+
+"""
+    fit(fitmethod::FactorEM, x::Matrix, weights::Vector)
+
+Fit a Mixture of Factor Analyzers model using Expectation Maximization with weighted data points.
+
+# Arguments
+- `fitmethod`: The FactorEM fitting method configuration
+- `x`: The data matrix (n_samples × n_features)
+- `weights`: Vector of weights for each data point
+
+# Returns
+- A MixtureModel of LRDMvNormal distributions
+
+# Notes
+- Supports weighted data points for importance sampling or missing data scenarios
+- Weights are automatically normalized to sum to 1
+- Uses the same EM algorithm but with weighted responsibilities
+"""
 function fit(fitmethod::FactorEM, x::Matrix, weights::Vector)
     norm_weights = weights ./ sum(weights)
     best_ll = -Inf

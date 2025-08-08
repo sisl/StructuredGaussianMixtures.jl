@@ -43,12 +43,7 @@ Return the size of the distribution as a tuple (dimension,).
 """
 Distributions.size(d::LRDMvNormal) = (length(d.μ),)
 
-"""
-    _covariance(d::LRDMvNormal)
-
-Compute the full covariance matrix (used internally).
-Returns FF' + D where F is the low-rank factor and D is the diagonal matrix.
-"""
+# Internal function - not documented
 function _covariance(d::LRDMvNormal)
     return d.F * d.F' + Diagonal(d.D)
 end

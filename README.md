@@ -1,5 +1,8 @@
 # StructuredGaussianMixtures.jl
 
+[![](https://img.shields.io/badge/docs-dev-blue.svg)](https://sisl.github.io/StructuredGaussianMixtures.jl/dev)
+
+
 ### Overview
 
 This package implements fitting and conditional prediction for Gaussian Mixture Models (GMM). Given a matrix of data $X$ of shape $(n_{features}, n_{samples})$, the method `fit(::GMMFitMethod, X)` returns a fitted GMM as a `Distributions.MixtureModel`. Given a fitted gmm, the method `predict(gmm, x; input_indices=1:length(x), output_indices=length(x)+1:length(gmm))` returns a posterior GMM over the output dimensions conditioned on the observed vector `x` at the input indices.
