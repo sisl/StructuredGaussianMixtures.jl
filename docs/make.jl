@@ -5,7 +5,7 @@ using Distributions
 
 makedocs(
     sitename = "StructuredGaussianMixtures",
-    format = Documenter.HTML(prettyurls = false),
+    format = Documenter.HTML(prettyurls = get(ENV, "CI", "false") == "true"),
     modules = [StructuredGaussianMixtures],
     pages = [
         "Home" => "index.md",
