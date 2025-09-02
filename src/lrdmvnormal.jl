@@ -25,6 +25,7 @@ struct LRDMvNormal <: Distributions.AbstractMvNormal
         length(μ) == size(F, 1) == length(D) || 
             throw(DimensionMismatch("Dimensions of μ, F, and D must match"))
         length(D) > size(F, 2) || throw(ArgumentError("Rank of F must be less than the number of features"))
+        all(d -> d > 0, D) || throw(ArgumentError("All diagonal elements must be positive"))
         new(μ, F, D, size(F, 2))
     end
 end
@@ -114,7 +115,15 @@ function Distributions._rand!(rng::AbstractRNG, d::LRDMvNormal, x::VecOrMat)
     randn!(rng, z2)
     
     # Transform to get samples from our distribution
-    mul!(x, d.F, z2)  # x = F * z2
+    if x isa AbstractVector
+        # For vectors, z2 is also a vector
+        z2_vec = similar(x, size(d.F, 2))
+        copyto!(z2_vec, z2)
+        mul!(x, d.F, z2_vec)  # x = F * z2
+    else
+        # For matrices, z2 is a matrix
+        mul!(x, d.F, z2)  # x = F * z2
+    end
     x .+= d.μ         # x += μ
     x .+= sqrt.(d.D) .* z1  # x += sqrt(D) * z1
     return x
