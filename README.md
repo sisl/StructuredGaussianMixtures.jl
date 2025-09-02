@@ -1,5 +1,5 @@
 # StructuredGaussianMixtures.jl
-
+[![](https://img.shields.io/badge/docs-stable-blue.svg)](https://sisl.github.io/StructuredGaussianMixtures.jl/stable)
 [![](https://img.shields.io/badge/docs-dev-blue.svg)](https://sisl.github.io/StructuredGaussianMixtures.jl/dev)
 [![codecov](https://codecov.io/gh/sisl/StructuredGaussianMixtures.jl/branch/main/graph/badge.svg)](https://app.codecov.io/gh/sisl/StructuredGaussianMixtures.jl)
 
