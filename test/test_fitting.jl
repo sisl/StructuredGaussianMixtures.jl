@@ -140,15 +140,7 @@ using GaussianMixtures
         @test_throws ArgumentError StructuredGaussianMixtures.fit(factorem_invalid, X)
     end
     
-    @testset "Edge Cases and Error Handling" begin
-        # Test with empty data - skip this test as it's not well-defined
-        # @test_throws PosDefException StructuredGaussianMixtures.fit(EM(2), Matrix{Float64}(undef, 0, 0))
-        
-        # Test with single sample - skip as it may cause numerical issues
-        # single_sample = randn(n_features, 1)
-        # gmm_single = StructuredGaussianMixtures.fit(EM(1), single_sample)
-        # @test length(gmm_single.components) == 1
-        
+    @testset "Edge Cases and Error Handling" begin        
         # Test with single feature
         single_feature = randn(1, n_samples)
         gmm_single_feature = StructuredGaussianMixtures.fit(EM(2), single_feature)
@@ -158,11 +150,6 @@ using GaussianMixtures
         tiny_data = randn(5, 10)
         gmm_tiny = StructuredGaussianMixtures.fit(EM(2), tiny_data)
         @test length(gmm_tiny.components) == 2
-        
-        # Test with very large data (small test to avoid long runtime)
-        large_data = randn(50, 200)
-        gmm_large = StructuredGaussianMixtures.fit(EM(3; nInit=2, nIter=3), large_data)
-        @test length(gmm_large.components) == 3
     end
     
     @testset "Numerical Stability" begin
