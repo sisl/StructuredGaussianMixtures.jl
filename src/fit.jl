@@ -63,8 +63,7 @@ end
 """
     PCAEM
 
-Mixture of Probabilistic Principal Component Analysis model.
-Fits a GMM in PCA-reduced space and transforms back to original space.
+Fits a structured GMM by fitting a GMM in PCA-compressed space.
 
 # Fields
 - `n_components`: Number of mixture components
@@ -98,7 +97,6 @@ end
 """
     fit(fitmethod::PCAEM, x::Matrix)
 
-Fit a Mixture of Probabilistic Principal Component Analysis model.
 This method first performs PCA to reduce dimensionality, then fits a GMM in the reduced space,
 and finally transforms the components back to the original space as LRDMvNormal distributions.
 

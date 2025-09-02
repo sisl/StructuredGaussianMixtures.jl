@@ -111,11 +111,11 @@ StructuredGaussianMixtures.fit(::FactorEM, ::Matrix, ::Vector)
 
 ### When to Use Each Method
 
-| Method | Best For | Covariance Structure | Computational Cost |
-|--------|----------|---------------------|-------------------|
-| **EM** | Low-dimensional data, full covariance needed | Full | O(m³) |
-| **PCAEM** | High-dimensional data, dimensionality reduction | Low-rank + diagonal | O(r³) where r < m |
-| **FactorEM** | High-dimensional data, direct low-rank fitting | Low-rank + diagonal | O(r³) where r < m |
+| Method | Best For | Covariance Structure | Computational Cost | Weighted Fitting |
+|--------|----------|----------------------|--------------------|------------------|
+| **FactorEM** | High-dimensional data, direct low-rank fitting | Low-rank + diagonal | O(r³ + mr² + nmr) where r < m | ✅ |
+| **EM** | Low-dimensional data, full covariance needed | Full | O(m³ + nm²) | ❌ | 
+| **PCAEM** | High-dimensional data with shared low-dimensional structure | Low-rank + diagonal | O(r³ + mr² + nr² + min(n²m,nm²)) where r < m | ❌ | 
 
 ## Simple Examples
 
@@ -161,4 +161,4 @@ gmm_factor = fit(FactorEM(3, 10), high_dim_data)
 
 ## Related Documentation
 
-- **[LRDMvNormal](@ref)**: Learn about the low-rank plus diagonal distribution used by PCAEM and FactorEM methods 
+- **[Structured Gaussians](@ref)**: Learn about the low-rank plus diagonal distribution used by PCAEM and FactorEM methods 

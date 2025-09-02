@@ -10,8 +10,8 @@ makedocs(
     pages = [
         "Home" => "index.md",
         "Fitting Methods" => [
-            "Overview" => "fitting.md",
-            "LRDMvNormal" => "lrdmvnormal.md"
+            "Fitting" => "fitting.md",
+            "Structured Gaussians" => "lrdmvnormal.md"
         ],
         "Prediction" => "prediction.md",
         "Examples" => "examples.md",
@@ -19,7 +19,9 @@ makedocs(
     remotes = nothing
 )
 
-deploydocs(
-    repo = "github.com/sisl/StructuredGaussianMixtures.jl",
-    push_preview = true
-)
+if get(ENV, "CI", "false") == "true"
+    deploydocs(
+        repo = "github.com/sisl/StructuredGaussianMixtures.jl",
+        push_preview = true
+    )
+end
