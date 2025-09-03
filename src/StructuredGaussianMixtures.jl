@@ -6,7 +6,7 @@ using Distributions
 using LinearAlgebra
 using Statistics
 using Random
-using MultivariateStats: PCA, fit as pca_fit, transform, reconstruct, projection, mean
+using MultivariateStats: PCA, fit as pca_fit, predict as pca_predict, reconstruct, projection, mean
 using GaussianMixtures
 import GaussianMixtures: covar
 using Clustering

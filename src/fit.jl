@@ -46,7 +46,7 @@ Fit a Gaussian Mixture Model using Expectation Maximization.
 
 # Arguments
 - `fitmethod`: The EM fitting method configuration
-- `x`: The data matrix (n_samples × n_features)
+- `x`: The data matrix (n_features, n_samples)
 
 # Returns
 - A MixtureModel of MvNormal distributions
@@ -102,7 +102,7 @@ and finally transforms the components back to the original space as LRDMvNormal 
 
 # Arguments
 - `fitmethod`: The PCAEM fitting method configuration
-- `x`: The data matrix (n_samples × n_features)
+- `x`: The data matrix (n_features, n_samples)
 
 # Returns
 - A MixtureModel of LRDMvNormal distributions
@@ -114,9 +114,12 @@ and finally transforms the components back to the original space as LRDMvNormal 
 - The diagonal noise term is estimated from PCA reconstruction error
 """
 function fit(fitmethod::PCAEM, x::Matrix)
+    
+    fitmethod.rank <= size(x, 1) || throw(ArgumentError("The rank of the PCA must be less than or equal to the number of features"))
+    
     # run PCA on x
     pca = pca_fit(PCA, x; maxoutdim=fitmethod.rank);
-    reduced_data = transform(pca, x);
+    reduced_data = pca_predict(pca, x);
     reconstructed_data = reconstruct(pca, reduced_data);
     error_data = x .- reconstructed_data
     D = vec(var(error_data, dims=2))
@@ -190,7 +193,7 @@ This method directly fits a mixture of low-rank plus diagonal Gaussian distribut
 
 # Arguments
 - `fitmethod`: The FactorEM fitting method configuration
-- `x`: The data matrix (n_samples × n_features)
+- `x`: The data matrix (n_features, n_samples)
 
 # Returns
 - A MixtureModel of LRDMvNormal distributions
@@ -209,7 +212,7 @@ Fit a Mixture of Factor Analyzers model using Expectation Maximization with weig
 
 # Arguments
 - `fitmethod`: The FactorEM fitting method configuration
-- `x`: The data matrix (n_samples × n_features)
+- `x`: The data matrix (n_features, n_samples)
 - `weights`: Vector of weights for each data point
 
 # Returns

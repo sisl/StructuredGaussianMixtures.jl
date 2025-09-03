@@ -11,7 +11,7 @@ using GaussianMixtures
     
     # Create test data
     n_features = 20
-    n_samples = 100
+    n_samples = 1000
     X = randn(n_features, n_samples)
     
     @testset "EM" begin
