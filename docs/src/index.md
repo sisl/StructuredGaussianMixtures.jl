@@ -2,43 +2,11 @@
 
 A Julia package for fitting and conditional prediction of Gaussian Mixture Models (GMMs) with structured covariance matrices.
 
-## Overview
-
-This package implements three main fitting methods for Gaussian Mixture Models:
-
-- **EM**: Standard Expectation Maximization for full covariance matrices
-- **PCAEM**: Mixture of Probabilistic Principal Component Analysis models
-- **FactorEM**: Mixture of Factor Analyzers with low-rank plus diagonal covariance structure
-
-The package also supports conditional prediction, allowing you to compute posterior distributions over unobserved dimensions given observed values.
-
-## Quick Start
-
-```julia
-using StructuredGaussianMixtures
-
-# Fit a GMM using EM
-data = randn(2, 1000)  # 2D data with 1000 samples
-gmm = fit(EM(3), data)  # 3-component GMM
-
-# Make predictions
-query_point = [0.5]
-posterior = predict(gmm, query_point)  # Posterior over second dimension
-```
-
-## Documentation Sections
-
-- **[Fitting Methods](@ref)**: Learn about the different fitting algorithms and when to use each
-- **[Prediction](@ref)**: Understand conditional prediction and posterior computation
-- **[Examples](@ref)**: Complete working examples from the test files
-
 ## Key Features
 
-- **Efficient high-dimensional fitting**: Low-rank covariance structures for `m ≫ n` settings
+- **Efficient high-dimensional fitting**: Different fitting methods, including those that efficiently fit low-rank covariance structures for `m ≫ n` settings
 - **Conditional prediction**: Compute posterior distributions over unobserved variables
 - **Weighted fitting**: Support for weighted data points in model fitting
-- **Multiple initialization methods**: K-means, random, and custom initialization
-- **Comprehensive evaluation**: Log-likelihood, JSD, and visualization tools
 
 ## Installation
 
@@ -47,10 +15,32 @@ using Pkg
 Pkg.add("StructuredGaussianMixtures")
 ```
 
-## API Reference
+## Methods
 
-The main functions and types are documented in their respective sections:
+This package implements three main fitting methods for Gaussian Mixture Models:
 
-- **[Fitting Methods](@ref)**: `EM`, `PCAEM`, `FactorEM`, and `fit` functions
-- **[LRDMvNormal](@ref)**: Low-rank plus diagonal distribution
-- **[Prediction](@ref)**: `predict` functions for conditional inference
+- **FactorEM** uses EM to fit a GMM with low-rank-plus-diagonal covariance structure $\Sigma = FF' + D$, using an inner EM step to update the covariance components. This is the only method that currently supports weighted fitting
+- **EM** uses standard EM to fit a GMM with full rank convariance
+- **PCAEM** fits a GMM with low-rank-plus-diagonal covariance structure by fitting a full-rank GMM on PCA-compressed data
+
+## Quick Start
+
+```julia
+using StructuredGaussianMixtures
+
+# Fit a GMM using EM
+data = randn(100, 1000)  # 100D data with 1000 samples
+w = rand(1000) # weights on data 
+gmm = fit(FactorEM(3,5), data, w)  # 3-component rank-5 low-rank-plus-diagonal GMM
+
+# Make predictions
+query_point = [0.5]
+posterior = predict(gmm, query_point)  # Posterior over dimensions 2:100 when x1 = 0.5
+```
+
+## Documentation and API Reference sections
+
+- **[Fitting Methods](@ref)**: Learn about the different fitting algorithms and when to use each
+    - **[Structured Gaussians](@ref)**: Learn about the structured Gaussians underpinning this project  
+- **[Prediction](@ref)**: Understand conditional prediction and posterior computation
+- **[Examples](@ref)**: Complete working examples from the test files

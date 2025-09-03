@@ -137,27 +137,23 @@ println("Predicted dimensions shape: ", size(samples))
 
 For a Gaussian Mixture Model with components $k = 1, \ldots, K$, the posterior distribution given observed values $x_{obs}$ is:
 
-$$p(x_{unobs} \mid x_{obs}) = \sum_{k=1}^K w_k \mathcal{N}(x_{unobs} \mid \mu_k^{unobs}, \Sigma_k^{unobs})$$
+$$p(x_{unobs} \mid x_{obs}) = \sum_{k=1}^K w^k \mathcal{N}(x_{unobs} \mid \mu^k_{unobs}, \Sigma^k_{unobs})$$
 
-where:
-
-- $w_k$ are the posterior component weights
-- $\mu_k^{unobs}$ is the conditional mean for component $k$
-- $\Sigma_k^{unobs}$ is the conditional covariance for component $k$
+where $w^k$ are the posterior component weights, $\mu^k_{unobs}$ is the conditional mean for component $k$, and $\Sigma^k_{unobs}$ is the conditional covariance for component $k$
 
 ### Component Weight Updates
 
 The posterior component weights are computed as:
 
-$$w_k = \frac{\pi_k \mathcal{N}(x_{obs} \mid \mu_k^{obs}, \Sigma_k^{obs})}{\sum_{j=1}^K \pi_j \mathcal{N}(x_{obs} \mid \mu_j^{obs}, \Sigma_j^{obs})}$$
+$$w^k = \frac{\pi^k \mathcal{N}(x_{obs} \mid \mu^k_{obs}, \Sigma^k_{obs})}{\sum_{j=1}^K \pi^j \mathcal{N}(x_{obs} \mid \mu^j_{obs}, \Sigma^j_{obs})}$$
 
 ### Conditional Parameters
 
 For each component $k$, the conditional parameters are:
 
-$$\mu_k^{unobs} = \mu_k^{unobs} + \Sigma_k^{unobs,obs} (\Sigma_k^{obs})^{-1} (x_{obs} - \mu_k^{obs})$$
+$$\mu^k_{unobs} = \mu^k_{unobs} + \Sigma^k_{unobs,obs} (\Sigma^k_{obs})^{-1} (x_{obs} - \mu^k_{obs})$$
 
-$$\Sigma_k^{unobs} = \Sigma_k^{unobs,unobs} - \Sigma_k^{unobs,obs} (\Sigma_k^{obs})^{-1} \Sigma_k^{obs,unobs}$$
+$$\Sigma^k_{unobs} = \Sigma^k_{unobs,unobs} - \Sigma^k_{unobs,obs} (\Sigma^k_{obs})^{-1} \Sigma^k_{obs,unobs}$$
 
 ## Advanced Usage
 
@@ -185,27 +181,4 @@ posterior_var = var(samples, dims=2)
 
 # Confidence intervals
 posterior_quantiles = quantile(samples, [0.025, 0.975], dims=2)
-```
-
-## Performance Considerations
-
-### Computational Complexity
-
-- **EM**: O(m³) for covariance operations
-- **PCAEM**: O(r³) where r is the PCA rank
-- **FactorEM**: O(r³) where r is the factor rank
-
-### Memory Usage
-
-For high-dimensional data, consider using low-rank methods:
-
-```julia
-# For 1000-dimensional data
-n_features = 1000
-data = randn(n_features, 100)
-
-# Use low-rank methods for efficiency
-gmm = fit(PCAEM(3, 10), data)  # 10-dimensional PCA
-# or
-gmm = fit(FactorEM(3, 10), data)  # Rank-10 factor analysis
 ```

@@ -1,20 +1,21 @@
-# LRDMvNormal
+# Structured Gaussians
 
 This page documents the `LRDMvNormal` class, which represents low-rank plus diagonal multivariate normal distributions.
 
 ## Overview
 
-The `LRDMvNormal` distribution represents a multivariate normal distribution with covariance matrix of the form:
+The `LRDMvNormal` distribution represents a multivariate normal distribution with covariance matrix of the form $\Sigma = FF' + D$, where:
 
-$$\Sigma = FF' + D$$
-
-where:
-
-- $F$ is a low-rank factor matrix of size $m \times r$ where $r \ll m$
-- $D$ is a diagonal matrix
+- F is a low-rank factor matrix of size $m \times r$ where $r \ll m$
+- D is a diagonal matrix
 - The full covariance matrix is never explicitly formed for efficiency
 
-This structure is particularly useful for high-dimensional data where $m \gg n$ (number of features much larger than number of samples).
+This structure is particularly useful in the following circumstances:
+
+- **High-dimensional data** where $m \gg n$ (number of features much larger than number of samples)
+- **Low-rank structure** in the data
+- **Memory constraints** preventing full covariance storage
+- **Efficient sampling** requirements
 
 ## Constructor
 
@@ -140,17 +141,7 @@ println("Full covariance shape: ", size(full_cov))
 
 ### Efficient Log-Likelihood Computation
 
-The log probability density is computed efficiently using the matrix inversion lemma:
-
-$$(FF' + D)^{-1} = D^{-1} - D^{-1}F(I + F'D^{-1}F)^{-1}F'D^{-1}$$
-
-This avoids forming the full covariance matrix and reduces computational complexity from O(m³) to O(r³) where r ≪ m.
-
-### Determinant Computation
-
-The determinant is computed efficiently as:
-
-$$\det(FF' + D) = \det(D) \cdot \det(I + F'D^{-1}F)$$
+The log probability density is computed efficiently using block elimination and the matrix inversion lemma to compute the quadratic form, and the standard determinant formula for low-rank plus diagonal matrices. The approach avoids forming the full covariance matrix and reduces computational complexity from O(m³) to O(mr² + r³) where r ≪ m.
 
 ### Sampling
 
@@ -166,7 +157,7 @@ where $Z_1$ and $Z_2$ are independent standard normal random vectors.
 
 | Operation | Complexity | Notes |
 |-----------|------------|-------|
-| Log-likelihood | O(r³) | Uses matrix inversion lemma |
+| Log-likelihood | O(mr² + r³) | Uses block elimination with Schur complement |
 | Sampling | O(mr) | Efficient decomposition |
 | Memory | O(mr) | Stores F and D, not full covariance |
 
@@ -177,12 +168,6 @@ For a distribution with $m$ features and rank $r$:
 - **Traditional**: $O(m²)$ for full covariance matrix
 - **Savings**: $O(m²/mr) = O(m/r)$ for typical $r \ll m$
 
-### When to Use
-
-- **High-dimensional data** where $m \gg n$
-- **Low-rank structure** in the data
-- **Memory constraints** preventing full covariance storage
-- **Efficient sampling** requirements
 
 ## Integration with GMMs
 
