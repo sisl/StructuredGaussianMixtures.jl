@@ -6,7 +6,8 @@ using Distributions
 using LinearAlgebra
 using Statistics
 using Random
-using MultivariateStats: PCA, fit as pca_fit, predict as pca_predict, reconstruct, projection, mean
+using MultivariateStats:
+    PCA, fit as pca_fit, predict as pca_predict, reconstruct, projection, mean
 using GaussianMixtures
 import GaussianMixtures: covar
 using Clustering
@@ -16,11 +17,11 @@ function Distributions.MixtureModel(gmm::GMM{T}) where {T<:AbstractFloat}
     # if gmm.d == 1
     #     mixtures = [Normal(gmm.μ[i,1], covar(gmm.Σ[i])) for i=1:gmm.n]
     if kind(gmm) == :full
-        mixtures = [MvNormal(vec(gmm.μ[i,:]), covar(gmm.Σ[i])) for i=1:gmm.n]
+        mixtures = [MvNormal(vec(gmm.μ[i, :]), covar(gmm.Σ[i])) for i in 1:(gmm.n)]
     else
-        mixtures = [MvNormal(vec(gmm.μ[i,:]), sqrt.(vec(gmm.Σ[i,:]))) for i=1:gmm.n]
+        mixtures = [MvNormal(vec(gmm.μ[i, :]), sqrt.(vec(gmm.Σ[i, :]))) for i in 1:(gmm.n)]
     end
-    MixtureModel(mixtures, gmm.w)
+    return MixtureModel(mixtures, gmm.w)
 end
 
 include("lrdmvnormal.jl")

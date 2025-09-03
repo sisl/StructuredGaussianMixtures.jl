@@ -40,27 +40,53 @@ fitmethod = FactorEM(2, 1; initialization_method=:kmeans, nInit=10, nIter=20)
 println("Number of samples with weight 1: ", sum(weights))
 println("Number of samples with weight 0: ", sum(weights .== 0))
 println("Weighted FactorEM Avg. Training LL: ", mean(logpdf(gmm_weighted, data)))
-println("Weighted FactorEM Avg. Training LL (weighted): ", sum(weights .* logpdf(gmm_weighted, data)) / sum(weights))
+println(
+    "Weighted FactorEM Avg. Training LL (weighted): ",
+    sum(weights .* logpdf(gmm_weighted, data)) / sum(weights),
+)
 
 # Plot samples with different colors based on weights
-p1 = scatter(data[1, weights .== 1], data[2, weights .== 1], 
-            alpha=0.8, title="Weighted Data (x1 ≤ 0)", xlabel="x1", ylabel="x2", 
-            label="Weight = 1", markersize=4, color=:red, margin=5Plots.mm)
-scatter!(p1, data[1, weights .== 0], data[2, weights .== 0], 
-         alpha=0.3, label="Weight = 0", markersize=2, color=:gray)
+p1 = scatter(
+    data[1, weights .== 1],
+    data[2, weights .== 1];
+    alpha=0.8,
+    title="Weighted Data (x1 ≤ 0)",
+    xlabel="x1",
+    ylabel="x2",
+    label="Weight = 1",
+    markersize=4,
+    color=:red,
+    margin=5Plots.mm,
+)
+scatter!(
+    p1,
+    data[1, weights .== 0],
+    data[2, weights .== 0];
+    alpha=0.3,
+    label="Weight = 0",
+    markersize=2,
+    color=:gray,
+)
 
 x_lims = xlims(p1)
-y_lims = ylims(p1)  
+y_lims = ylims(p1)
 
 # Generate samples from the fitted model
 gmm_samples = rand(gmm_weighted, n_samples)
-p2 = scatter(gmm_samples[1, :], gmm_samples[2, :], 
-            alpha=0.6, title="Fitted Model Samples", xlabel="x1", ylabel="x2", 
-            label="Model samples", markersize=3, margin=5Plots.mm,
-            xlims=x_lims, ylims=y_lims)
-
+p2 = scatter(
+    gmm_samples[1, :],
+    gmm_samples[2, :];
+    alpha=0.6,
+    title="Fitted Model Samples",
+    xlabel="x1",
+    ylabel="x2",
+    label="Model samples",
+    markersize=3,
+    margin=5Plots.mm,
+    xlims=x_lims,
+    ylims=y_lims,
+)
 
 # Combine plots
-weighted_plot = plot(p1, p2, layout=(1, 2), size=(800, 400))
+weighted_plot = plot(p1, p2; layout=(1, 2), size=(800, 400))
 display(weighted_plot)
-
