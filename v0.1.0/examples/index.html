@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Examples · StructuredGaussianMixtures</title><meta name="title" content="Examples · StructuredGaussianMixtures"/><meta property="og:title" content="Examples · StructuredGaussianMixtures"/><meta property="twitter:title" content="Examples · StructuredGaussianMixtures"/><meta name="description" content="Documentation for StructuredGaussianMixtures."/><meta property="og:description" content="Documentation for StructuredGaussianMixtures."/><meta property="twitter:description" content="Documentation for StructuredGaussianMixtures."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">StructuredGaussianMixtures</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Fitting Methods</span><ul><li><a class="tocitem" href="../fitting/">Fitting</a></li><li><a class="tocitem" href="../lrdmvnormal/">Structured Gaussians</a></li></ul></li><li><a class="tocitem" href="../prediction/">Prediction</a></li><li class="is-active"><a class="tocitem" href>Examples</a><ul class="internal"><li><a class="tocitem" href="#Example-1:-Basic-Fitting"><span>Example 1: Basic Fitting</span></a></li><li><a class="tocitem" href="#Example-2:-High-Dimensional-Data"><span>Example 2: High-Dimensional Data</span></a></li><li><a class="tocitem" href="#Example-3:-Conditional-Prediction"><span>Example 3: Conditional Prediction</span></a></li><li><a class="tocitem" href="#Example-4:-Weighted-Fitting"><span>Example 4: Weighted Fitting</span></a></li><li><a class="tocitem" href="#Example-5:-LRDMvNormal-Usage"><span>Example 5: LRDMvNormal Usage</span></a></li><li><a class="tocitem" href="#Example-6:-Partial-Prediction"><span>Example 6: Partial Prediction</span></a></li><li><a class="tocitem" href="#Example-7:-Multiple-Query-Points"><span>Example 7: Multiple Query Points</span></a></li><li><a class="tocitem" href="#Running-the-Examples"><span>Running the Examples</span></a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Examples</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Examples</a></li></ul></nav><div class="docs-right"><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Examples"><a class="docs-heading-anchor" href="#Examples">Examples</a><a id="Examples-1"></a><a class="docs-heading-anchor-permalink" href="#Examples" title="Permalink"></a></h1><p>This page provides simple working examples demonstrating typical workflows for fitting, prediction, and weighted fitting.</p><h2 id="Example-1:-Basic-Fitting"><a class="docs-heading-anchor" href="#Example-1:-Basic-Fitting">Example 1: Basic Fitting</a><a id="Example-1:-Basic-Fitting-1"></a><a class="docs-heading-anchor-permalink" href="#Example-1:-Basic-Fitting" title="Permalink"></a></h2><p>This example shows how to fit GMMs using the three different methods.</p><pre><code class="language-julia hljs">using StructuredGaussianMixtures
+
+# Generate some data
+data = randn(2, 1000)
+
+# Fit with different methods
+gmm_em = fit(EM(3), data)
+gmm_pca = fit(PCAEM(3, 1), data)
+gmm_factor = fit(FactorEM(3, 1), data)
+
+# Evaluate performance
+println(&quot;EM log-likelihood: &quot;, mean(logpdf(gmm_em, data)))
+println(&quot;PCAEM log-likelihood: &quot;, mean(logpdf(gmm_pca, data)))
+println(&quot;FactorEM log-likelihood: &quot;, mean(logpdf(gmm_factor, data)))</code></pre><h2 id="Example-2:-High-Dimensional-Data"><a class="docs-heading-anchor" href="#Example-2:-High-Dimensional-Data">Example 2: High-Dimensional Data</a><a id="Example-2:-High-Dimensional-Data-1"></a><a class="docs-heading-anchor-permalink" href="#Example-2:-High-Dimensional-Data" title="Permalink"></a></h2><p>This example demonstrates the effectiveness of low-rank methods for high-dimensional data.</p><pre><code class="language-julia hljs"># High-dimensional data
+n_features = 100
+n_samples = 50
+data = randn(n_features, n_samples)
+
+# Compare methods
+println(&quot;Fitting EM model...&quot;)
+@time gmm_em = fit(EM(3), data)
+
+println(&quot;Fitting PCAEM model...&quot;)
+@time gmm_pca = fit(PCAEM(3, 10), data)
+
+println(&quot;Fitting FactorEM model...&quot;)
+@time gmm_factor = fit(FactorEM(3, 10), data)
+
+# Compare performance
+println(&quot;EM log-likelihood: &quot;, mean(logpdf(gmm_em, data)))
+println(&quot;PCAEM log-likelihood: &quot;, mean(logpdf(gmm_pca, data)))
+println(&quot;FactorEM log-likelihood: &quot;, mean(logpdf(gmm_factor, data)))</code></pre><h2 id="Example-3:-Conditional-Prediction"><a class="docs-heading-anchor" href="#Example-3:-Conditional-Prediction">Example 3: Conditional Prediction</a><a id="Example-3:-Conditional-Prediction-1"></a><a class="docs-heading-anchor-permalink" href="#Example-3:-Conditional-Prediction" title="Permalink"></a></h2><p>This example demonstrates how to perform conditional prediction.</p><pre><code class="language-julia hljs"># Fit a GMM
+data = randn(2, 1000)
+gmm = fit(EM(3), data)
+
+# Make prediction
+x_query = [0.5]
+posterior = predict(gmm, x_query)
+
+# Generate samples from posterior
+samples = rand(posterior, 100)
+println(&quot;Posterior mean: &quot;, mean(samples))
+println(&quot;Posterior variance: &quot;, var(samples))</code></pre><h2 id="Example-4:-Weighted-Fitting"><a class="docs-heading-anchor" href="#Example-4:-Weighted-Fitting">Example 4: Weighted Fitting</a><a id="Example-4:-Weighted-Fitting-1"></a><a class="docs-heading-anchor-permalink" href="#Example-4:-Weighted-Fitting" title="Permalink"></a></h2><p>This example shows how to fit a GMM with weighted data points.</p><pre><code class="language-julia hljs"># Generate data
+data = randn(2, 1000)
+
+# Create weights based on data values
+weights = [data[1, i] &gt; 0 ? 1.0 : 0.5 for i in 1:size(data, 2)]
+
+# Fit with weights (only FactorEM supports this)
+gmm_weighted = fit(FactorEM(3, 1), data, weights)
+
+# Print results
+println(&quot;Number of samples with weight 1: &quot;, sum(weights .== 1.0))
+println(&quot;Number of samples with weight 0.5: &quot;, sum(weights .== 0.5))
+println(&quot;Weighted log-likelihood: &quot;, mean(logpdf(gmm_weighted, data)))</code></pre><h2 id="Example-5:-LRDMvNormal-Usage"><a class="docs-heading-anchor" href="#Example-5:-LRDMvNormal-Usage">Example 5: LRDMvNormal Usage</a><a id="Example-5:-LRDMvNormal-Usage-1"></a><a class="docs-heading-anchor-permalink" href="#Example-5:-LRDMvNormal-Usage" title="Permalink"></a></h2><p>This example shows how to work directly with LRDMvNormal distributions.</p><pre><code class="language-julia hljs">using StructuredGaussianMixtures
+
+# Create a low-rank distribution
+n_features = 10
+rank = 3
+μ = randn(n_features)
+F = randn(n_features, rank)
+D = ones(n_features) * 0.1
+
+dist = LRDMvNormal(μ, F, D)
+
+# Basic properties
+println(&quot;Dimension: &quot;, length(dist))
+println(&quot;Rank: &quot;, rank(dist))
+println(&quot;Mean: &quot;, mean(dist)[1:5])  # First 5 elements
+
+# Generate samples
+samples = rand(dist, 1000)
+println(&quot;Sample shape: &quot;, size(samples))
+
+# Compute log probability
+log_prob = logpdf(dist, samples[:, 1])
+println(&quot;Log probability: &quot;, log_prob)</code></pre><h2 id="Example-6:-Partial-Prediction"><a class="docs-heading-anchor" href="#Example-6:-Partial-Prediction">Example 6: Partial Prediction</a><a id="Example-6:-Partial-Prediction-1"></a><a class="docs-heading-anchor-permalink" href="#Example-6:-Partial-Prediction" title="Permalink"></a></h2><p>This example shows how to predict specific dimensions.</p><pre><code class="language-julia hljs"># Fit a 5D GMM
+data = randn(5, 1000)
+gmm = fit(EM(3), data)
+
+# Observe dimensions 1 and 3, predict dimensions 2, 4, and 5
+observed_values = [0.5, -0.2]
+observed_dims = [1, 3]
+output_dims = [2, 4, 5]
+
+posterior = predict(gmm, observed_values; 
+    input_indices=observed_dims, 
+    output_indices=output_dims)
+
+# Generate samples
+samples = rand(posterior, 100)
+println(&quot;Predicted dimensions shape: &quot;, size(samples))</code></pre><h2 id="Example-7:-Multiple-Query-Points"><a class="docs-heading-anchor" href="#Example-7:-Multiple-Query-Points">Example 7: Multiple Query Points</a><a id="Example-7:-Multiple-Query-Points-1"></a><a class="docs-heading-anchor-permalink" href="#Example-7:-Multiple-Query-Points" title="Permalink"></a></h2><p>This example shows how to make predictions for multiple query points.</p><pre><code class="language-julia hljs"># Fit a GMM
+data = randn(2, 1000)
+gmm = fit(EM(3), data)
+
+# Predict for multiple query points
+query_points = [[0.5], [-0.2], [1.1]]
+posteriors = [predict(gmm, q) for q in query_points]
+
+# Generate samples for each
+samples = [rand(p, 50) for p in posteriors]
+
+# Print results
+for (i, (q, s)) in enumerate(zip(query_points, samples))
+    println(&quot;Query $i: mean = &quot;, mean(s), &quot;, variance = &quot;, var(s))
+end</code></pre><h2 id="Running-the-Examples"><a class="docs-heading-anchor" href="#Running-the-Examples">Running the Examples</a><a id="Running-the-Examples-1"></a><a class="docs-heading-anchor-permalink" href="#Running-the-Examples" title="Permalink"></a></h2><p>To run these examples:</p><ol><li><p><strong>Install dependencies</strong>:</p><pre><code class="language-julia hljs">using Pkg
+Pkg.add([&quot;StructuredGaussianMixtures&quot;, &quot;Distributions&quot;, &quot;LinearAlgebra&quot;, &quot;Random&quot;, &quot;Statistics&quot;])</code></pre></li><li><p><strong>Load the package</strong>:</p><pre><code class="language-julia hljs">using StructuredGaussianMixtures</code></pre></li><li><p><strong>Run examples</strong>: Copy and paste any example into a Julia session.</p></li></ol></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../prediction/">« Prediction</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Wednesday 3 September 2025 05:46">Wednesday 3 September 2025</span>. Using Julia version 1.11.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
