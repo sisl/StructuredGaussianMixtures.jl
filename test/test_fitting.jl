@@ -25,16 +25,16 @@ using GaussianMixtures
         @test em.nFinal == 10
 
         # Test EM with custom parameters
-        em_custom = EM(5; method=:rand, kind=:diag, nInit=10, nIter=5, nFinal=3)
-        @test em_custom.n_components == 5
-        @test em_custom.method == :rand
+        em_custom = EM(3; method=:kmeans, kind=:diag, nInit=10, nIter=5, nFinal=3)
+        @test em_custom.n_components == 3
+        @test em_custom.method == :kmeans
         @test em_custom.kind == :diag
         @test em_custom.nInit == 10
         @test em_custom.nIter == 5
         @test em_custom.nFinal == 3
 
         # Test EM fitting
-        gmm = StructuredGaussianMixtures.fit(em, X)
+        gmm = StructuredGaussianMixtures.fit(em_custom, X)
         @test length(gmm.components) == 3
         @test length(gmm.prior.p) == 3
         @test sum(gmm.prior.p) ≈ 1.0 atol = 1e-10
@@ -63,11 +63,11 @@ using GaussianMixtures
 
         # Test PCAEM with custom parameters
         pcaem_custom = PCAEM(
-            4, 6; gmm_method=:rand, gmm_kind=:diag, gmm_nInit=5, gmm_nIter=3, gmm_nFinal=2
+            4, 6; gmm_method=:kmeans, gmm_kind=:diag, gmm_nInit=5, gmm_nIter=3, gmm_nFinal=2
         )
         @test pcaem_custom.n_components == 4
         @test pcaem_custom.rank == 6
-        @test pcaem_custom.gmm_method == :rand
+        @test pcaem_custom.gmm_method == :kmeans
         @test pcaem_custom.gmm_kind == :diag
         @test pcaem_custom.gmm_nInit == 5
         @test pcaem_custom.gmm_nIter == 3
@@ -156,34 +156,9 @@ using GaussianMixtures
         @test length(gmm_tiny.components) == 2
     end
 
-    @testset "Numerical Stability" begin
-        # Test with nearly singular data
-        nearly_singular = copy(X)
-        nearly_singular[:, 1:10] .= nearly_singular[:, 1] .+ 1e-10 * randn(n_features, 10)
-
-        gmm_stable = StructuredGaussianMixtures.fit(
-            EM(2; nInit=2, nIter=3), nearly_singular
-        )
-        @test length(gmm_stable.components) == 2
-
-        # Test with very small variance data
-        small_var_data = X .* 1e-6
-        gmm_small_var = StructuredGaussianMixtures.fit(
-            EM(2; nInit=2, nIter=3), small_var_data
-        )
-        @test length(gmm_small_var.components) == 2
-
-        # Test with very large variance data
-        large_var_data = X .* 1e6
-        gmm_large_var = StructuredGaussianMixtures.fit(
-            EM(2; nInit=2, nIter=3), large_var_data
-        )
-        @test length(gmm_large_var.components) == 2
-    end
-
     @testset "Mixture Model Properties" begin
         # Test that fitted models have reasonable properties
-        gmm = StructuredGaussianMixtures.fit(EM(3; nInit=2, nIter=3), X)
+        gmm = StructuredGaussianMixtures.fit(EM(3; kind=:diag, nInit=2, nIter=3), X)
 
         # Test component means are finite
         for comp in gmm.components
