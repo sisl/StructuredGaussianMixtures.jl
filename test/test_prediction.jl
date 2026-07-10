@@ -131,6 +131,19 @@ using StructuredGaussianMixtures
         diag_dist = LRDMvNormal(μ, zeros(n, 0), D)
         diag_cond = predict(diag_dist, randn(5), 1:5, 6:10)
         @test length(diag_cond) == 5
+
+        # Regression test for issue #19: near-saturating rank (d=3, rank=2) can
+        # produce eigenvalues of I - I_plus_FF_inv that are mathematically ≥ 0
+        # but tip slightly negative in floating point, throwing DomainError in
+        # the unclamped sqrt. Seed 2 deterministically triggers this.
+        Random.seed!(2)
+        μ_sat = randn(3)
+        F_sat = randn(3, 2)
+        D_sat = abs.(randn(3)) .+ 1e-3
+        sat_dist = LRDMvNormal(μ_sat, F_sat, D_sat)
+        sat_x = randn(1)
+        sat_cond = predict(sat_dist, sat_x, [1], [2, 3])
+        @test length(sat_cond) == 2
     end
 
     # @testset "Numerical Stability" begin

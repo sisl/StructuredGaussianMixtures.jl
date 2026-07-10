@@ -108,7 +108,9 @@ function predict(
     # For the low-rank part: F₂ * (I - I_plus_FF_inv) * F₂'
     # Compute matrix square root using eigendecomposition
     λ, Q = eigen(I - I_plus_FF_inv)
-    F₂_cond = F₂ * (Q * Diagonal(sqrt.(λ)))
+    # Clamp mathematically-nonnegative eigenvalues that tip slightly negative in
+    # floating point (near-saturating rank) to keep sqrt in its real domain.
+    F₂_cond = F₂ * (Q * Diagonal(sqrt.(max.(λ, 0))))
 
     # For the diagonal part: D₂ + diag(F₂ * I_plus_FF_inv * F₂')
     D₂_cond = D₂ + diag(F₂ * (I_plus_FF_inv * F₂'))
