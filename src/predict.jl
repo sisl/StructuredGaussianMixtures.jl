@@ -104,20 +104,21 @@ function predict(
     F₁_D₁_inv = F₁ .* D₁_inv
     μ₂₁ = μ₂ + F₂ * (I_plus_FF_inv * (F₁_scaled' * (D₁_inv_sqrt .* x_centered)))
 
-    # Compute the conditional covariance structure efficiently
-    # For the low-rank part: F₂ * (I - I_plus_FF_inv) * F₂'
-    # Compute matrix square root using eigendecomposition
-    λ, Q = eigen(I - I_plus_FF_inv)
-    # Clamp mathematically-nonnegative eigenvalues that tip slightly negative in
-    # floating point (near-saturating rank) to keep sqrt in its real domain.
-    F₂_cond = F₂ * (Q * Diagonal(sqrt.(max.(λ, 0))))
-
-    # For the diagonal part: D₂ + diag(F₂ * I_plus_FF_inv * F₂')
-    D₂_cond = D₂ + diag(F₂ * (I_plus_FF_inv * F₂'))
+    # Compute the conditional covariance structure efficiently.
+    # By the Woodbury identity, the Schur complement of the joint LRD covariance is
+    #   Σ_cond = F₂ * M⁻¹ * F₂' + Diagonal(D₂),   where M = I + F₁' D₁⁻¹ F₁.
+    # Here `I_plus_FF_inv` is M⁻¹.
+    # Take a matrix square root C of M⁻¹ (M⁻¹ = C * C') so that F_cond = F₂ * C
+    # gives F_cond * F_cond' = F₂ * M⁻¹ * F₂'. Clamp eigenvalues at zero for robustness.
+    λ, Q = eigen(Symmetric(I_plus_FF_inv))
+    C = Q * Diagonal(sqrt.(max.(λ, 0)))
+    F₂_cond = F₂ * C
+    D₂_cond = D₂
 
     # Return the conditional distribution
     if length(output_indices) <= dist.rank
-        return MvNormal(μ₂₁, F₂_cond * F₂_cond' + Diagonal(D₂_cond))
+        Σ_cond = F₂_cond * F₂_cond' + Diagonal(D₂_cond)
+        return MvNormal(μ₂₁, Symmetric(Σ_cond))
     else
         return LRDMvNormal(μ₂₁, F₂_cond, D₂_cond)
     end

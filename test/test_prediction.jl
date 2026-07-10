@@ -62,6 +62,38 @@ using StructuredGaussianMixtures
         @test cond_dist_large isa LRDMvNormal
         @test length(cond_dist_large) == length(large_output)
 
+        # Test that conditional covariance matches the Schur complement
+        # Use interleaved indices to catch index-mixing bugs.
+        Σ_full = cov(dist_lrd)
+
+        # Branch returning MvNormal: length(output) <= rank
+        input_small = [1, 3, 5, 7, 9]
+        output_small = [2, 4, 6, 8, 10]
+        @test length(output_small) <= dist_lrd.rank
+        x_small = randn(length(input_small))
+        cond_small = predict(dist_lrd, x_small, input_small, output_small)
+        @test cond_small isa MvNormal
+        Σ11_s = Σ_full[input_small, input_small]
+        Σ12_s = Σ_full[input_small, output_small]
+        Σ21_s = Σ_full[output_small, input_small]
+        Σ22_s = Σ_full[output_small, output_small]
+        schur_small = Σ22_s - Σ21_s * (Σ11_s \ Σ12_s)
+        @test cov(cond_small) ≈ schur_small atol = 1e-8
+
+        # Branch returning LRDMvNormal: length(output) > rank
+        input_large = [1, 3, 5, 7, 9]
+        output_large = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
+        @test length(output_large) > dist_lrd.rank
+        x_large = randn(length(input_large))
+        cond_large = predict(dist_lrd, x_large, input_large, output_large)
+        @test cond_large isa LRDMvNormal
+        Σ11_l = Σ_full[input_large, input_large]
+        Σ12_l = Σ_full[input_large, output_large]
+        Σ21_l = Σ_full[output_large, input_large]
+        Σ22_l = Σ_full[output_large, output_large]
+        schur_large = Σ22_l - Σ21_l * (Σ11_l \ Σ12_l)
+        @test cov(cond_large) ≈ schur_large atol = 1e-8
+
         # Test error handling
         @test_throws ArgumentError predict(dist_lrd, x1, [0, 1, 2], [3, 4, 5])  # out of bounds
         @test_throws ArgumentError predict(dist_lrd, x1, [1, 2, 3], [n + 1, n + 2, n + 3])  # out of bounds
