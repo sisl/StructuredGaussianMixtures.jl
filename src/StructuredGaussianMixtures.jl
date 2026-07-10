@@ -8,6 +8,7 @@ using Statistics
 using Random
 using MultivariateStats:
     PCA, fit as pca_fit, predict as pca_predict, reconstruct, projection, mean
+using Arpack: eigs
 using GaussianMixtures
 import GaussianMixtures: covar
 using Clustering
