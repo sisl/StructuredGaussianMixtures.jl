@@ -109,6 +109,53 @@ struct PCAEM <: GMMFitMethod
     end
 end
 
+# _truncated_pca(x, rank)
+#
+# Compute only the top-`rank` principal directions of `x` (features × samples) and
+# return the loadings `P` (features × rank, orthonormal columns) and the data mean `μ`.
+#
+# Rather than computing a full eigen/SVD and truncating, this eigendecomposes whichever
+# Gram matrix is smaller: the `d × d` covariance when `d <= n`, or the `n × n` Gram
+# matrix `Z'Z` when `d > n` (recovering the feature-space loadings via `Z * W`). This
+# avoids the wasted work of a full decomposition when `rank ≪ min(d, n)`.
+#
+# For small problems (`min(d, n)` small, or `rank` close to `min(d, n)`), Arpack's
+# iterative `eigs` has high overhead and requires `nev < size - 1`, so a dense
+# `eigen` is used and truncated instead. Both paths return mathematically equivalent
+# results (loadings are defined up to per-column sign / rotation within tied
+# eigenvalues).
+function _truncated_pca(x::AbstractMatrix, rank::Int)
+    d, n = size(x)
+    μ = vec(Statistics.mean(x; dims=2))
+    Z = x .- μ
+    smaller = min(d, n)
+    use_dense = smaller <= 100 || rank >= smaller - 1
+
+    if d <= n
+        C = Symmetric((Z * Z') ./ (n - 1))          # d × d covariance
+        if use_dense
+            F = eigen(C)
+            idx = sortperm(F.values; rev=true)[1:rank]
+            P = F.vectors[:, idx]
+        else
+            _, V = eigs(C; nev=rank, which=:LR)
+            P = V
+        end
+    else
+        G = Symmetric((Z' * Z) ./ (n - 1))          # n × n Gram (cheap when d > n)
+        if use_dense
+            F = eigen(G)
+            idx = sortperm(F.values; rev=true)[1:rank]
+            W = F.vectors[:, idx]
+        else
+            _, W = eigs(G; nev=rank, which=:LR)
+        end
+        U = Z * W
+        P = U ./ sqrt.(sum(abs2, U; dims=1))         # unit-norm feature-space loadings
+    end
+    return P, μ
+end
+
 """
     fit(fitmethod::PCAEM, x::Matrix)
 
@@ -135,14 +182,11 @@ function fit(fitmethod::PCAEM, x::Matrix)
         ),
     )
 
-    # run PCA on x
-    pca = pca_fit(PCA, x; maxoutdim=fitmethod.rank)
-    reduced_data = pca_predict(pca, x)
-    reconstructed_data = reconstruct(pca, reduced_data)
-    error_data = x .- reconstructed_data
-    D = vec(var(error_data; dims=2))
-    μ = mean(pca)
-    P = projection(pca)
+    # compute only the top-rank principal directions and the data mean
+    P, μ = _truncated_pca(x, fitmethod.rank)
+    reduced_data = P' * (x .- μ)
+    reconstructed_data = P * reduced_data .+ μ
+    D = vec(var(x .- reconstructed_data; dims=2))
 
     # fit GMM on the PCA scores
     gmm = GMM(
