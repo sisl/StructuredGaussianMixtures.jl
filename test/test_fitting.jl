@@ -144,6 +144,108 @@ using GaussianMixtures
         @test_throws ArgumentError StructuredGaussianMixtures.fit(factorem_invalid, X)
     end
 
+    @testset "FactorEM data-driven initialization" begin
+        # initialize_gmm must produce finite, correctly shaped F and strictly
+        # positive D for both initialization methods and a range of ranks.
+        for method in (:kmeans, :rand), r in (0, 2, 5)
+            init = StructuredGaussianMixtures.initialize_gmm(method, 3, r, X)
+            @test length(init.components) == 3
+            @test sum(init.prior.p) ≈ 1.0 atol = 1e-10
+            for comp in init.components
+                @test comp isa LRDMvNormal
+                @test size(comp.F) == (n_features, r)
+                @test all(isfinite, comp.F)
+                @test all(comp.D .> 0)
+                @test all(isfinite, comp.D)
+            end
+        end
+
+        # The data-driven factor must be non-zero on data with real structure
+        # (so the m_step! zero-fallback never fires on normal inputs).
+        init_structured = StructuredGaussianMixtures.initialize_gmm(:kmeans, 3, 3, X)
+        @test any(comp -> !all(iszero, comp.F), init_structured.components)
+    end
+
+    @testset "FactorEM non-regression on low-rank data" begin
+        # Generate data with genuine low-rank-plus-diagonal cluster structure:
+        # X = F_true * z + cluster mean + diagonal noise.
+        Random.seed!(20240709)
+        d = 15
+        rank_true = 3
+        n_clusters = 3
+        n_per = 400
+        cluster_cols = Matrix{Float64}[]
+        for _ in 1:n_clusters
+            μ_k = 5.0 .* randn(d)
+            F_true = randn(d, rank_true)
+            noise_var = 0.3 .* abs.(randn(d)) .+ 0.05
+            z = randn(rank_true, n_per)
+            cluster_cols = push!(
+                cluster_cols, F_true * z .+ μ_k .+ (sqrt.(noise_var) .* randn(d, n_per))
+            )
+        end
+        Xstruct = hcat(cluster_cols...)
+        n = size(Xstruct, 2)
+        w = ones(n) / n
+
+        # Data-driven init reaches a good absolute mean log-likelihood on data
+        # whose structure it is designed to capture.
+        factorem = FactorEM(n_clusters, rank_true; nIter=15, nInternalIter=15)
+        gmm_new = StructuredGaussianMixtures.fit(factorem, Xstruct, w)
+        ll_new = logpdf(gmm_new, Xstruct)' * w
+        @test isfinite(ll_new)
+        @test ll_new >= -20.0  # comfortably above the poorly-fit regime
+
+        # Compare against the historic 0.1*I initialization run through the same
+        # EM loop: the data-driven init must not regress (>= old, within noise).
+        function old_identity_init(K, r, data)
+            dim, m = size(data)
+            km = StructuredGaussianMixtures.kmeans(data, K)
+            a = StructuredGaussianMixtures.assignments(km)
+            centers = km.centers
+            comps = Vector{LRDMvNormal}(undef, K)
+            weights = zeros(K)
+            for k in 1:K
+                mask = a .== k
+                cd = data[:, mask]
+                μ = isempty(cd) ? centers[:, k] : vec(mean(cd; dims=2))
+                D = isempty(cd) ? vec(var(data; dims=2)) : vec(var(cd; dims=2))
+                F = 0.1 * Matrix{Float64}(I, dim, r)
+                comps[k] = LRDMvNormal(μ, F, D)
+                weights[k] = count(mask) / m
+            end
+            return MixtureModel(comps, weights)
+        end
+
+        Random.seed!(555)
+        gmm_old = old_identity_init(n_clusters, rank_true, Xstruct)
+        for _ in 1:15
+            lr = StructuredGaussianMixtures.e_step(gmm_old, Xstruct)
+            StructuredGaussianMixtures.m_step!(gmm_old, Xstruct, lr, w; nInternalIter=15)
+        end
+        ll_old = logpdf(gmm_old, Xstruct)' * w
+
+        @test ll_new >= ll_old - 1e-2  # no meaningful regression at convergence
+
+        # With only a couple of EM iterations, the data-driven init should be
+        # strictly better than 0.1*I because it starts near the true structure.
+        Random.seed!(777)
+        gmm_new_fast = StructuredGaussianMixtures.initialize_gmm(
+            :kmeans, n_clusters, rank_true, Xstruct
+        )
+        Random.seed!(888)
+        gmm_old_fast = old_identity_init(n_clusters, rank_true, Xstruct)
+        for _ in 1:2
+            for g in (gmm_new_fast, gmm_old_fast)
+                lr = StructuredGaussianMixtures.e_step(g, Xstruct)
+                StructuredGaussianMixtures.m_step!(g, Xstruct, lr, w; nInternalIter=3)
+            end
+        end
+        ll_new_fast = logpdf(gmm_new_fast, Xstruct)' * w
+        ll_old_fast = logpdf(gmm_old_fast, Xstruct)' * w
+        @test ll_new_fast > ll_old_fast
+    end
+
     @testset "Edge Cases and Error Handling" begin
         # Test with single feature
         single_feature = randn(1, n_samples)

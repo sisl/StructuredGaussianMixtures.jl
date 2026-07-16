@@ -229,7 +229,9 @@ This method directly fits a mixture of low-rank plus diagonal Gaussian distribut
 # Notes
 - Directly fits the low-rank plus diagonal structure
 - More computationally intensive than PCAEM but potentially more accurate
-- Not yet implemented
+- The low-rank factor `F` of each component is initialized in a data-driven way
+  from the leading principal directions of that component's residual covariance
+  (see `initialize_gmm`), rather than from an arbitrary scaled identity.
 """
 fit(fitmethod::FactorEM, x::Matrix) = fit(fitmethod, x, ones(size(x, 2)) / size(x, 2))
 
@@ -282,6 +284,29 @@ function fit(fitmethod::FactorEM, x::Matrix, weights::Vector)
     return best_gmm
 end
 
+"""
+    initialize_gmm(method, n_components, rank, x; epsilon=0.01)
+
+Construct an initial mixture of `LRDMvNormal` components for `FactorEM`.
+
+Each component's low-rank factor `F` is initialized from the leading `rank`
+principal directions of that component's residual covariance, scaled by the
+square root of the corresponding eigenvalues — the same low-rank factorization
+used by `PCAEM` (`F = Q * Diagonal(sqrt.(λ))`). This is data-driven and
+scale-aware, unlike the previous scaled-identity fallback.
+
+The diagonal `D` is initialized to the residual variance not already explained
+by `F` (per-feature total variance minus `diag(FF')`), floored at `epsilon`
+times the mean feature variance so that `D` stays strictly positive (required
+by the `LRDMvNormal` constructor).
+
+Edge cases:
+- Empty clusters fall back to the global mean/variance with `F = 0`.
+- Clusters with fewer usable eigenvalues than `rank` (e.g. clusters smaller than
+  `rank`, or `rank == 0`) pad the remaining columns of `F` with zeros.
+- The `:rand` method seeds each component from a random data point and applies
+  the same eigendecomposition-based `F` to a random subset of the data.
+"""
 function initialize_gmm(
     method::Symbol, n_components::Int, rank::Int, x::Matrix; epsilon::Float64=0.01
 )
@@ -303,17 +328,18 @@ function initialize_gmm(
             cluster_data = x[:, cluster_mask]
 
             if isempty(cluster_data)
-                # If cluster is empty, use small random initialization
+                # If cluster is empty, fall back to global mean/variance with zero factor
                 μ = centers[:, k]
-                F = zeros(n_features, rank)
-                D = global_var
+                F, D = _init_factor_and_diagonal(
+                    zeros(n_features, 0), Float64[], rank, epsilon, global_var
+                )
             else
-                # Compute mean and variance for this cluster
+                # Compute mean for this cluster
                 μ = mean(cluster_data; dims=2)[:]
-                D = var(cluster_data; dims=2)[:]
-
-                # Initialize low-rank factor with small random values
-                F = zeros(n_features, rank)
+                # Data-driven low-rank factor from the cluster's residual covariance
+                F, D = _init_factor_from_data(
+                    cluster_data, μ, rank, epsilon, global_var
+                )
             end
             components[k] = LRDMvNormal(μ, F, D)
             weights[k] = count(cluster_mask) / n_samples
@@ -321,16 +347,18 @@ function initialize_gmm(
 
         return MixtureModel(components, weights)
     elseif method == :rand
-        # Choose n_components random rows of x as means
+        # Choose n_components random points of x as means
         rows = rand(1:n_samples, n_components)
         means = x[:, rows]
 
-        # Initialize components with random low-rank structure
+        # Initialize components with a data-driven low-rank factor built from a
+        # random subset of the data (so the factor reflects the data scale/structure).
         components = Vector{LRDMvNormal}(undef, n_components)
+        subset_size = max(rank + 1, n_samples ÷ n_components)
         for k in 1:n_components
             μ = means[:, k]
-            F = zeros(n_features, rank)
-            D = global_var
+            subset = x[:, rand(1:n_samples, min(subset_size, n_samples))]
+            F, D = _init_factor_from_data(subset, μ, rank, epsilon, global_var)
             components[k] = LRDMvNormal(μ, F, D)
         end
 
@@ -340,6 +368,65 @@ function initialize_gmm(
     else
         throw(ArgumentError("Invalid initialization method: $method"))
     end
+end
+
+"""
+    _init_factor_from_data(data, μ, rank, epsilon, global_var)
+
+Build the initial low-rank factor `F` and diagonal `D` for a component from the
+residual covariance of `data` about mean `μ`, using an eigendecomposition of the
+sample covariance. Returns `(F, D)` with `F` sized `(n_features, rank)` and `D`
+strictly positive.
+"""
+function _init_factor_from_data(
+    data::AbstractMatrix, μ::AbstractVector, rank::Int, epsilon::Float64, global_var::AbstractVector
+)
+    n_features = length(μ)
+    total_var = vec(var(data; dims=2))
+    # Guard against zero-variance features (e.g. single-point clusters)
+    total_var = map(v -> isfinite(v) ? v : 0.0, total_var)
+
+    # Dense eigendecomposition of the residual covariance; clusters are small so this is cheap.
+    r = data .- μ
+    n = size(data, 2)
+    Σ = n > 1 ? (r * r') / (n - 1) : zeros(n_features, n_features)
+    λ, Q = eigen(Symmetric(Σ))  # ascending eigenvalues
+    return _init_factor_and_diagonal(Q, λ, rank, epsilon, global_var; total_var=total_var)
+end
+
+"""
+    _init_factor_and_diagonal(Q, λ, rank, epsilon, global_var; total_var=λ-sum)
+
+Assemble `F = Q_top * Diagonal(sqrt.(max.(λ_top, 0)))` from the top `rank`
+eigenpairs, padding with zero columns when fewer than `rank` eigenvalues are
+available. The diagonal `D` is the per-feature residual variance not explained
+by `F`, floored at `epsilon * mean(global_var)` to remain strictly positive.
+"""
+function _init_factor_and_diagonal(
+    Q::AbstractMatrix,
+    λ::AbstractVector,
+    rank::Int,
+    epsilon::Float64,
+    global_var::AbstractVector;
+    total_var::AbstractVector=global_var,
+)
+    n_features = length(global_var)
+    floor_val = max(epsilon * mean(global_var), eps())
+
+    F = zeros(n_features, rank)
+    # eigen returns eigenvalues in ascending order; take the largest `rank`.
+    n_avail = length(λ)
+    n_use = min(rank, n_avail)
+    for j in 1:n_use
+        idx = n_avail - j + 1  # j-th largest eigenvalue column
+        λj = max(λ[idx], 0.0)
+        F[:, j] = Q[:, idx] .* sqrt(λj)
+    end
+
+    # D = total per-feature variance not explained by F, floored to stay positive.
+    explained = vec(sum(F .^ 2; dims=2))
+    D = max.(total_var .- explained, floor_val)
+    return F, D
 end
 
 function e_step(gmm::MixtureModel, x::Matrix)
@@ -393,10 +480,15 @@ function m_step!(
         # Initialize D to residual covariance diagonal
         D = deepcopy(C_r)
 
-        # Initialize F to previous value (or clipped identity if first iteration)
+        # Initialize F to previous value. `initialize_gmm` now provides a
+        # data-driven, non-zero F, so this branch is only a safety net for the
+        # degenerate case of an all-zero factor (e.g. an empty cluster or
+        # rank-deficient residual). Fall back to a small factor scaled by the
+        # residual variance so it stays data-aware rather than an arbitrary 0.1.
         F = comp.F
         if all(iszero, F)
-            F .= 0.1 * Matrix{Float64}(I, n_features, size(F, 2))
+            scale = sqrt(mean(C_r))
+            F .= 0.1 * scale * Matrix{Float64}(I, n_features, size(F, 2))
         end
 
         # Inner EM iterations for F and D
