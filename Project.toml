@@ -9,7 +9,6 @@ Clustering = "aaaa29a8-35af-508c-8bc3-b662a17a0fe5"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 GaussianMixtures = "cc18c42c-b769-54ff-9e2a-b28141a64aae"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-MultivariateStats = "6f286f6a-111f-5878-ab1e-185364afe411"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
@@ -19,13 +18,13 @@ Clustering = "0.15.8"
 Distributions = "0.25.120"
 GaussianMixtures = "0.3.13"
 LinearAlgebra = "1.11.0"
-MultivariateStats = "0.10.3"
 Random = "1.11.0"
 Statistics = "1.11.1"
 julia = "1.6.7"
 
 [extras]
+MultivariateStats = "6f286f6a-111f-5878-ab1e-185364afe411"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test"]
+test = ["MultivariateStats", "Test"]
