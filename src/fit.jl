@@ -109,23 +109,21 @@ struct PCAEM <: GMMFitMethod
     end
 end
 
-"""
-    _truncated_pca(x, rank)
-
-Compute only the top-`rank` principal directions of `x` (features × samples) and
-return the loadings `P` (features × rank, orthonormal columns) and the data mean `μ`.
-
-Rather than computing a full eigen/SVD and truncating, this eigendecomposes whichever
-Gram matrix is smaller: the `d × d` covariance when `d <= n`, or the `n × n` Gram
-matrix `Z'Z` when `d > n` (recovering the feature-space loadings via `Z * W`). This
-avoids the wasted work of a full decomposition when `rank ≪ min(d, n)`.
-
-For small problems (`min(d, n)` small, or `rank` close to `min(d, n)`), Arpack's
-iterative `eigs` has high overhead and requires `nev < size - 1`, so a dense
-`eigen` is used and truncated instead. Both paths return mathematically equivalent
-results (loadings are defined up to per-column sign / rotation within tied
-eigenvalues).
-"""
+# _truncated_pca(x, rank)
+#
+# Compute only the top-`rank` principal directions of `x` (features × samples) and
+# return the loadings `P` (features × rank, orthonormal columns) and the data mean `μ`.
+#
+# Rather than computing a full eigen/SVD and truncating, this eigendecomposes whichever
+# Gram matrix is smaller: the `d × d` covariance when `d <= n`, or the `n × n` Gram
+# matrix `Z'Z` when `d > n` (recovering the feature-space loadings via `Z * W`). This
+# avoids the wasted work of a full decomposition when `rank ≪ min(d, n)`.
+#
+# For small problems (`min(d, n)` small, or `rank` close to `min(d, n)`), Arpack's
+# iterative `eigs` has high overhead and requires `nev < size - 1`, so a dense
+# `eigen` is used and truncated instead. Both paths return mathematically equivalent
+# results (loadings are defined up to per-column sign / rotation within tied
+# eigenvalues).
 function _truncated_pca(x::AbstractMatrix, rank::Int)
     d, n = size(x)
     μ = vec(Statistics.mean(x; dims=2))
