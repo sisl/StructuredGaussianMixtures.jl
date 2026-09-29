@@ -68,27 +68,7 @@ Uses the matrix inversion lemma for efficient computation.
 - Computes the determinant efficiently: det(F*F' + D) = det(D) * det(I + F'*D^(-1)*F)
 """
 function Distributions.logpdf(d::LRDMvNormal, x::AbstractVector)
-    # Center the data
-    x_centered = x - d.μ
-
-    # Compute the precision matrix efficiently using the matrix inversion lemma
-    # (F*F' + D)^(-1) = D^(-1) - D^(-1)*F*(I + F'*D^(-1)*F)^(-1)*F'*D^(-1)
-    D_inv = 1 ./ d.D
-    F_scaled = d.F .* sqrt.(D_inv)
-    I_plus_FF = I + F_scaled' * F_scaled
-
-    # Compute the determinant efficiently
-    # det(F*F' + D) = det(D) * det(I + F'*D^(-1)*F)
-    logdet_cov = sum(log.(d.D)) + logdet(I_plus_FF)
-
-    # Compute the quadratic form efficiently with block elimination
-    # quad_form = dot(x_centered, precision * x_centered)
-    y = (I_plus_FF \ F_scaled') * (sqrt.(D_inv) .* x_centered)
-    eta = D_inv .* (x_centered - d.F * y)
-    quad_form = dot(x_centered, eta)
-
-    # Return the log PDF
-    return -0.5 * (length(d.μ) * log(2π) + logdet_cov + quad_form)
+    return _factor_logpdf(d.μ, d.D, _prepare_factor(d.F, d.D), x)
 end
 
 """
@@ -206,4 +186,9 @@ Return the diagonal vector D.
 """
 function diagonal(d::LRDMvNormal)
     return d.D
+end
+
+# Batch preparation shares the same small factorization across observations.
+function Distributions.logpdf(d::LRDMvNormal, X::AbstractMatrix)
+    return _factor_logpdf(d.μ, d.D, _prepare_factor(d.F, d.D), X)
 end

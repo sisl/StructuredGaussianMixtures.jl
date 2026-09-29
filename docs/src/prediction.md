@@ -60,7 +60,7 @@ StructuredGaussianMixtures.predict(::MultivariateMixture, ::AbstractVector, ::Un
 ### Convenience Function
 
 ```@docs
-StructuredGaussianMixtures.predict(::Union{MvNormal,LRDMvNormal,MultivariateMixture}, ::AbstractVector)
+StructuredGaussianMixtures.predict(::Union{MvNormal,LRDMvNormal,LatentMvNormal,MultivariateMixture}, ::AbstractVector)
 ```
 
 ## Marginal Functions
@@ -182,3 +182,8 @@ posterior_var = var(samples, dims=2)
 # Confidence intervals
 posterior_quantiles = quantile(samples, [0.025, 0.975], dims=2)
 ```
+## Explicit latent components
+
+PCAEM returns `LatentMvNormal` components. The same prediction API preserves their
+loading basis and updates their latent covariance factor. See [Explicit Latent Gaussians](@ref)
+for index validation, ownership and migration details.

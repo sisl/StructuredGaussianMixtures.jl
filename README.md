@@ -17,7 +17,7 @@ This package currently implements three `GMMFitMethod`s.
 
 - **EM** fits a GMM with full-rank covariance using a standard Expectation Maximization procedure from  `GaussianMixtures.jl`. 
 
-- **PCAEM** fit a low-rank-plus-diagonal GMM by compressing the data using PCA, fitting a GMM in the reduced space, transforming back, and adding residuals to the diagonals. 
+- **PCAEM** fit a low-rank-plus-diagonal GMM by compressing the data using PCA, fitting a GMM in the reduced space, transforming back, and adding residuals to the diagonals. It now returns `LatentMvNormal(μ, L, d, B)` components with covariance `L*B*B'*L' + Diagonal(d)`, preserving the PCA basis and latent covariance separately. FactorEM continues to return `LRDMvNormal` components. See [the latent Gaussian guide](docs/src/latentmvnormal.md) for usage and migration.
 
 ### Installation
 

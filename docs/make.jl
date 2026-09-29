@@ -9,8 +9,11 @@ makedocs(;
     modules=[StructuredGaussianMixtures],
     pages=[
         "Home" => "index.md",
-        "Fitting Methods" =>
-            ["Fitting" => "fitting.md", "Structured Gaussians" => "lrdmvnormal.md"],
+        "Fitting Methods" => [
+            "Fitting" => "fitting.md",
+            "Structured Gaussians" => "lrdmvnormal.md",
+            "Latent Gaussians" => "latentmvnormal.md",
+        ],
         "Prediction" => "prediction.md",
         "Examples" => "examples.md",
     ],

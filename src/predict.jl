@@ -221,7 +221,7 @@ function predict(
 end
 
 """
-    predict(dist::Union{MvNormal,LRDMvNormal,MultivariateMixture}, x::AbstractVector; 
+    predict(dist::Union{MvNormal,LRDMvNormal,LatentMvNormal,MultivariateMixture}, x::AbstractVector;
            input_indices::Union{Vector{Int},AbstractRange} = 1:length(x), 
            output_indices::Union{Vector{Int},AbstractRange} = length(x)+1:length(mean(dist)))
 
@@ -238,7 +238,7 @@ Returns a new distribution representing the conditional distribution.
 - A new distribution representing the conditional distribution
 """
 function predict(
-    dist::Union{MvNormal,LRDMvNormal,MultivariateMixture},
+    dist::Union{MvNormal,LRDMvNormal,LatentMvNormal,MultivariateMixture},
     x::AbstractVector;
     input_indices::Union{Vector{Int},AbstractRange}=1:length(x),
     output_indices::Union{Vector{Int},AbstractRange}=(length(x) + 1):length(mean(dist)),

@@ -160,14 +160,14 @@ end
     fit(fitmethod::PCAEM, x::Matrix)
 
 This method first performs PCA to reduce dimensionality, then fits a GMM in the reduced space,
-and finally transforms the components back to the original space as LRDMvNormal distributions.
+and finally transforms the components back to the original space as LatentMvNormal distributions.
 
 # Arguments
 - `fitmethod`: The PCAEM fitting method configuration
 - `x`: The data matrix (n_features, n_samples)
 
 # Returns
-- A MixtureModel of LRDMvNormal distributions
+- A MixtureModel of LatentMvNormal distributions
 
 # Notes
 - Uses PCA for dimensionality reduction
@@ -200,24 +200,13 @@ function fit(fitmethod::PCAEM, x::Matrix)
     )
     gmm = MixtureModel(gmm)
 
-    # for each component of the GMM, make a LRDMvNormal distribution, with the following parameters:
-    # μ = μ + P * comp.μ, where comp.μ is the mean of the k-th component of the GMM
-    # F = P * comp.Σ^0.5, where comp.Σ is the covariance of the k-th component of the GMM
-    # D = D
-    lr_components = components(gmm)
-    @assert length(lr_components) == fitmethod.n_components "The number of components in the GMM must be equal to the number of components in the MPPCA"
-    comps = Vector{LRDMvNormal}(undef, fitmethod.n_components)
-
-    for (k, comp) in enumerate(lr_components)
-        # Compute mean in original space
+    # Retain the shared PCA basis and residual variances explicitly. Constructors
+    # copy them so mutation of one component cannot silently affect another.
+    comps = Vector{LatentMvNormal}(undef, fitmethod.n_components)
+    for (k, comp) in enumerate(components(gmm))
         μ_k = μ + P * mean(comp)
-
-        # Compute low-rank factor using eigendecomposition for stability
-        λ, Q = eigen(cov(comp))
-        F_k = P * (Q * Diagonal(sqrt.(λ)))
-
-        # Create the component
-        comps[k] = LRDMvNormal(μ_k, F_k, D)
+        B_k = Matrix(cholesky(Symmetric(cov(comp))).L)
+        comps[k] = LatentMvNormal(μ_k, P, D, B_k)
     end
 
     return MixtureModel(comps, probs(gmm))

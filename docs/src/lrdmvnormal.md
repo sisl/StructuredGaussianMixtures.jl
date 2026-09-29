@@ -171,10 +171,10 @@ For a distribution with $m$ features and rank $r$:
 
 ## Integration with GMMs
 
-The `LRDMvNormal` distribution is used internally by `PCAEM` and `FactorEM` methods:
+FactorEM returns `LRDMvNormal`; PCAEM returns [`LatentMvNormal`](@ref), which keeps the PCA basis and latent covariance separate:
 
 ```julia
-# PCAEM creates LRDMvNormal components
+# PCAEM creates LatentMvNormal components
 gmm = fit(PCAEM(3, 5), data)
 for comp in components(gmm)
     println("Component rank: ", rank(comp))
