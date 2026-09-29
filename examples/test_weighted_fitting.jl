@@ -39,9 +39,9 @@ fitmethod = FactorEM(2, 1; initialization_method=:kmeans, nInit=10, nIter=20)
 # Print results
 println("Number of samples with weight 1: ", sum(weights))
 println("Number of samples with weight 0: ", sum(weights .== 0))
-println("Weighted FactorEM Avg. Training LL: ", mean(logpdf(gmm_weighted, data)))
+println("Weighted FactorEM Avg. Training FF: ", mean(logpdf(gmm_weighted, data)))
 println(
-    "Weighted FactorEM Avg. Training LL (weighted): ",
+    "Weighted FactorEM Avg. Training FF (weighted): ",
     sum(weights .* logpdf(gmm_weighted, data)) / sum(weights),
 )
 

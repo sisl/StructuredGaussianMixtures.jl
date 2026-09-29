@@ -6,7 +6,7 @@ Abstract type for Gaussian Mixture Model fitting methods.
 abstract type GMMFitMethod end
 fit(gmmfit::GMMFitMethod, x::Matrix) = throw(MethodError(fit, (gmmfit, x)))
 function fit(gmmfit::GMMFitMethod, x::Matrix, weights::Vector)
-    throw(MethodError(fit, (gmmfit, x, weights)))
+    return throw(MethodError(fit, (gmmfit, x, weights)))
 end
 
 """
@@ -134,9 +134,9 @@ function _truncated_pca(x::AbstractMatrix, rank::Int)
     if d <= n
         C = Symmetric((Z * Z') ./ (n - 1))          # d × d covariance
         if use_dense
-            F = eigen(C)
-            idx = sortperm(F.values; rev=true)[1:rank]
-            P = F.vectors[:, idx]
+            eigensystem = eigen(C)
+            idx = sortperm(eigensystem.values; rev=true)[1:rank]
+            P = eigensystem.vectors[:, idx]
         else
             _, V = eigs(C; nev=rank, which=:LR)
             P = V
@@ -144,9 +144,9 @@ function _truncated_pca(x::AbstractMatrix, rank::Int)
     else
         G = Symmetric((Z' * Z) ./ (n - 1))          # n × n Gram (cheap when d > n)
         if use_dense
-            F = eigen(G)
-            idx = sortperm(F.values; rev=true)[1:rank]
-            W = F.vectors[:, idx]
+            eigensystem = eigen(G)
+            idx = sortperm(eigensystem.values; rev=true)[1:rank]
+            W = eigensystem.vectors[:, idx]
         else
             _, W = eigs(G; nev=rank, which=:LR)
         end
@@ -205,8 +205,8 @@ function fit(fitmethod::PCAEM, x::Matrix)
     comps = Vector{LatentMvNormal}(undef, fitmethod.n_components)
     for (k, comp) in enumerate(components(gmm))
         μ_k = μ + P * mean(comp)
-        B_k = Matrix(cholesky(Symmetric(cov(comp))).L)
-        comps[k] = LatentMvNormal(μ_k, P, D, B_k)
+        A_factor_k = Matrix(cholesky(Symmetric(cov(comp))).L)
+        comps[k] = LatentMvNormal(μ_k, P, D, A_factor_k)
     end
 
     return MixtureModel(comps, probs(gmm))

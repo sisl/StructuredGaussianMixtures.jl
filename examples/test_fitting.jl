@@ -39,12 +39,12 @@ function compare_methods_pca(true_gmm, n_components, n_rank; run_pca=true, n_sam
 
     # print the JSD between the true model and the three models
     test_data = rand(true_gmm, n_samples ÷ 5)
-    println("EM Avg. Training LL: ", mean(logpdf(gmm_full, data)))
-    println("PCAEM Avg. Training LL: ", mean(logpdf(gmm_pca, data)))
-    println("FactorEM Avg. Training LL: ", mean(logpdf(gmm_factor, data)))
-    println("EM Avg. Test LL: ", mean(logpdf(gmm_full, test_data)))
-    println("PCAEM Avg. Test LL: ", mean(logpdf(gmm_pca, test_data)))
-    println("FactorEM Avg. Test LL: ", mean(logpdf(gmm_factor, test_data)))
+    println("EM Avg. Training FF: ", mean(logpdf(gmm_full, data)))
+    println("PCAEM Avg. Training FF: ", mean(logpdf(gmm_pca, data)))
+    println("FactorEM Avg. Training FF: ", mean(logpdf(gmm_factor, data)))
+    println("EM Avg. Test FF: ", mean(logpdf(gmm_full, test_data)))
+    println("PCAEM Avg. Test FF: ", mean(logpdf(gmm_pca, test_data)))
+    println("FactorEM Avg. Test FF: ", mean(logpdf(gmm_factor, test_data)))
     println("EM|True JSD: ", mc_jsd(true_gmm, gmm_full))
     println("PCAEM|True JSD: ", mc_jsd(true_gmm, gmm_pca))
     println("FactorEM|True JSD: ", mc_jsd(true_gmm, gmm_factor))
@@ -129,8 +129,8 @@ n_rank = 1
 true_probs = rand(n_components)
 true_probs = true_probs / sum(true_probs)
 true_means = [rand([-3.0, 3.0], n_features) for _ in 1:n_components]
-true_Ls = [randn(n_features, n_features) for _ in 1:n_components]
-true_covs = [true_Ls[i] * true_Ls[i]' for i in 1:n_components]
+true_Fs = [randn(n_features, n_features) for _ in 1:n_components]
+true_covs = [true_Fs[i] * true_Fs[i]' for i in 1:n_components]
 true_gmm = MixtureModel(MvNormal.(true_means, true_covs), true_probs)
 compare_methods_pca(true_gmm, n_components, n_rank; run_pca=false)
 
@@ -143,8 +143,8 @@ sigma = 0.1
 true_probs = rand(n_components)
 true_probs = true_probs / sum(true_probs)
 F = randn(n_features, n_rank)
-true_Ls = [F * randn(n_rank, n_rank) for _ in 1:n_components]
-true_covs = [true_Ls[i] * true_Ls[i]' + sigma^2 * I for i in 1:n_components]
+true_Fs = [F * randn(n_rank, n_rank) for _ in 1:n_components]
+true_covs = [true_Fs[i] * true_Fs[i]' + sigma^2 * I for i in 1:n_components]
 true_means = [rand([-1.0, 1.0], n_features) for _ in 1:n_components]
 true_gmm = MixtureModel(MvNormal.(true_means, true_covs), true_probs)
 compare_methods_pca(true_gmm, n_components, n_rank; run_pca=true)

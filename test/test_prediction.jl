@@ -51,13 +51,13 @@ using StructuredGaussianMixtures
         @test mean(cond_dist_custom) ≈ expected_mean atol = 1e-10
 
         # Test with small output dimension (should return MvNormal)
-        small_output = [1, 2, 3]
+        small_output = [2, 4, 6]
         cond_dist_small = predict(dist_lrd, x_input, input_idx, small_output)
         @test cond_dist_small isa MvNormal
         @test length(cond_dist_small) == length(small_output)
 
         # Test with large output dimension (should return LRDMvNormal)
-        large_output = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        large_output = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
         cond_dist_large = predict(dist_lrd, x_input, input_idx, large_output)
         @test cond_dist_large isa LRDMvNormal
         @test length(cond_dist_large) == length(large_output)

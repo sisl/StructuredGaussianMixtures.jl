@@ -4,10 +4,10 @@ using StructuredGaussianMixtures
 @testset "LatentMvNormal" begin
     rng = MersenneTwister(912)
     for (p, r) in ((12, 3), (3, 5), (6, 0))
-        μ, L, D = randn(rng, p), randn(rng, p, r), 0.3 .+ rand(rng, p)
-        B = randn(rng, r, r) # deliberately nonsymmetric, not triangular
-        g = LatentMvNormal(μ, L, D, B)
-        Σ = L * B * B' * L' + Diagonal(D)
+        μ, F, D = randn(rng, p), randn(rng, p, r), 0.3 .+ rand(rng, p)
+        A_factor = randn(rng, r, r) # deliberately nonsymmetric, not triangular
+        g = LatentMvNormal(μ, F, D, A_factor)
+        Σ = F * A_factor * A_factor' * F' + Diagonal(D)
         dense = MvNormal(copy(μ), Symmetric(Σ))
         X = randn(rng, p, 19)
         @test size(g) == (p,)
@@ -15,7 +15,7 @@ using StructuredGaussianMixtures
         @test StructuredGaussianMixtures.rank(g) == r
         @test mean(g) == μ
         @test cov(g) ≈ Σ
-        @test low_rank_factor(g) ≈ L * B
+        @test low_rank_factor(g) ≈ F * A_factor
         @test logpdf(g, X) ≈ logpdf(dense, X) atol=1e-9
         @test logpdf(g, X[:, 1]) ≈ logpdf(dense, X[:, 1]) atol=1e-9
         @test logpdf(g, X) ≈ [logpdf(g, x) for x in eachcol(X)]
@@ -31,7 +31,7 @@ using StructuredGaussianMixtures
         @test c isa LatentMvNormal
         @test mean(c) ≈ expected_mean atol=1e-9
         @test cov(c) ≈ expected_cov atol=1e-9
-        @test loading(c) == L[target, :]
+        @test loading(c) == F[target, :]
         @test cov(predict(g, Float64[], Int[], target)) ≈ Σ[target, target]
         @test cov(marginal(g, [p, 2, 1])) ≈ Σ[[p, 2, 1], [p, 2, 1]]
         @test length(predict(g, [0.0])) == p - 1
@@ -44,14 +44,14 @@ using StructuredGaussianMixtures
         @test_throws ArgumentError marginal(g, Int[])
 
         # Constructor and derived distributions own their arrays.
-        L[1, :] .= 99
-        B .= 99
+        F[1, :] .= 99
+        A_factor .= 99
         D .= 99
         μ .= 99
         @test cov(g) ≈ Σ
         lc = loading(g)
         lc .= 0
-        bc = latent_factor(g)
+        bc = latent_covariance_factor(g)
         bc .= 0
         dc = diagonal(g)
         dc .= 0
@@ -64,20 +64,20 @@ using StructuredGaussianMixtures
     end
 
     @testset "identity, singular factors, and LRD equivalence" begin
-        μ, L, D = randn(rng, 8), randn(rng, 8, 3), ones(8)
-        for B in (Matrix{Float64}(I, 3, 3), zeros(3, 3), [1.0 2 0; 0 0 0; 0 0 0])
-            g = LatentMvNormal(μ, L, D, B)
-            lrd = LRDMvNormal(μ, L * B, D)
+        μ, F, D = randn(rng, 8), randn(rng, 8, 3), ones(8)
+        for A_factor in (Matrix{Float64}(I, 3, 3), zeros(3, 3), [1.0 2 0; 0 0 0; 0 0 0])
+            g = LatentMvNormal(μ, F, D, A_factor)
+            lrd = LRDMvNormal(μ, F * A_factor, D)
             X = randn(rng, 8, 10)
             @test logpdf(g, X) ≈ logpdf(lrd, X)
             @test cov(predict(g, [0.2, -0.5], [1, 3], [2, 4, 5, 6])) ≈
                 cov(predict(lrd, [0.2, -0.5], [1, 3], [2, 4, 5, 6]))
         end
-        @test_throws DimensionMismatch LatentMvNormal(μ, L, D, ones(2, 2))
-        @test_throws DimensionMismatch LatentMvNormal(μ[1:2], L, D, ones(3, 3))
-        @test_throws ArgumentError LatentMvNormal(μ, L, zeros(8), ones(3, 3))
-        @test_throws ArgumentError LatentMvNormal(μ, L, fill(Inf, 8), ones(3, 3))
-        @test_throws ArgumentError LatentMvNormal(μ, L, D, fill(NaN, 3, 3))
+        @test_throws DimensionMismatch LatentMvNormal(μ, F, D, ones(2, 2))
+        @test_throws DimensionMismatch LatentMvNormal(μ[1:2], F, D, ones(3, 3))
+        @test_throws ArgumentError LatentMvNormal(μ, F, zeros(8), ones(3, 3))
+        @test_throws ArgumentError LatentMvNormal(μ, F, fill(Inf, 8), ones(3, 3))
+        @test_throws ArgumentError LatentMvNormal(μ, F, D, fill(NaN, 3, 3))
     end
 
     @testset "sampling moments" begin
@@ -135,7 +135,7 @@ using StructuredGaussianMixtures
         @test probs(model) ≈ probs(reduced)
         a, b = components(model)
         before = cov(b)
-        a.L .= 0 # Even direct field mutation cannot affect another component.
+        a.F .= 0 # Even direct field mutation cannot affect another component.
         a.D .= 7
         @test cov(b) == before
     end

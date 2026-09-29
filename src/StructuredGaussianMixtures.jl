@@ -28,7 +28,7 @@ include("lrdmvnormal.jl")
 export LRDMvNormal, rank, low_rank_factor, diagonal
 
 include("latentmvnormal.jl")
-export LatentMvNormal, loading, latent_factor
+export LatentMvNormal, loading, latent_covariance_factor, latent_covariance
 
 include("fit.jl")
 export fit, GMMFitMethod, EM, PCAEM, FactorEM

@@ -5,7 +5,8 @@ using Distributions
 using StructuredGaussianMixtures
 using GaussianMixtures
 using Statistics
-using MultivariateStats: PCA, fit as pca_fit, projection, mean as pca_mean, predict as pca_predict, reconstruct
+using MultivariateStats:
+    PCA, fit as pca_fit, projection, mean as pca_mean, predict as pca_predict, reconstruct
 
 @testset "Fitting Methods" begin
     # Set random seed for reproducibility
