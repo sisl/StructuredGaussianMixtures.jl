@@ -13,14 +13,14 @@ using StructuredGaussianMixtures
 data = randn(2, 1000)
 
 # Fit with different methods
-gmm_em = fit(EM(3), data)
-gmm_pca = fit(PCAEM(3, 1), data)
-gmm_factor = fit(FactorEM(3, 1), data)
+gmm_em = fit(MixtureSpec(FullCovariance(), 3), EM(), data)
+gmm_pca = fit(MixtureSpec(LatentCovariance(1), 3; tied=Tied(:F,:D)), PCAEM(), data)
+gmm_factor = fit(MixtureSpec(LowRankDiagonal(1), 3), EM(covariance_method=CovarianceEM()), data)
 
 # Evaluate performance
 println("EM log-likelihood: ", mean(logpdf(gmm_em, data)))
 println("PCAEM log-likelihood: ", mean(logpdf(gmm_pca, data)))
-println("FactorEM log-likelihood: ", mean(logpdf(gmm_factor, data)))
+println("LRD EM log-likelihood: ", mean(logpdf(gmm_factor, data)))
 ```
 
 ## Example 2: High-Dimensional Data
@@ -35,18 +35,18 @@ data = randn(n_features, n_samples)
 
 # Compare methods
 println("Fitting EM model...")
-@time gmm_em = fit(EM(3), data)
+@time gmm_em = fit(MixtureSpec(FullCovariance(), 3), EM(), data)
 
 println("Fitting PCAEM model...")
-@time gmm_pca = fit(PCAEM(3, 10), data)
+@time gmm_pca = fit(MixtureSpec(LatentCovariance(10), 3; tied=Tied(:F,:D)), PCAEM(), data)
 
-println("Fitting FactorEM model...")
-@time gmm_factor = fit(FactorEM(3, 10), data)
+println("Fitting LRD EM model...")
+@time gmm_factor = fit(MixtureSpec(LowRankDiagonal(10), 3), EM(covariance_method=CovarianceEM()), data)
 
 # Compare performance
 println("EM log-likelihood: ", mean(logpdf(gmm_em, data)))
 println("PCAEM log-likelihood: ", mean(logpdf(gmm_pca, data)))
-println("FactorEM log-likelihood: ", mean(logpdf(gmm_factor, data)))
+println("LRD EM log-likelihood: ", mean(logpdf(gmm_factor, data)))
 ```
 
 ## Example 3: Conditional Prediction
@@ -56,7 +56,7 @@ This example demonstrates how to perform conditional prediction.
 ```julia
 # Fit a GMM
 data = randn(2, 1000)
-gmm = fit(EM(3), data)
+gmm = fit(MixtureSpec(FullCovariance(), 3), EM(), data)
 
 # Make prediction
 x_query = [0.5]
@@ -79,8 +79,8 @@ data = randn(2, 1000)
 # Create weights based on data values
 weights = [data[1, i] > 0 ? 1.0 : 0.5 for i in 1:size(data, 2)]
 
-# Fit with weights (only FactorEM supports this)
-gmm_weighted = fit(FactorEM(3, 1), data, weights)
+# Fit with weights (all fitting paths support weights)
+gmm_weighted = fit(MixtureSpec(LowRankDiagonal(1), 3), EM(covariance_method=CovarianceEM()), data; weights)
 
 # Print results
 println("Number of samples with weight 1: ", sum(weights .== 1.0))
@@ -125,7 +125,7 @@ This example shows how to predict specific dimensions.
 ```julia
 # Fit a 5D GMM
 data = randn(5, 1000)
-gmm = fit(EM(3), data)
+gmm = fit(MixtureSpec(FullCovariance(), 3), EM(), data)
 
 # Observe dimensions 1 and 3, predict dimensions 2, 4, and 5
 observed_values = [0.5, -0.2]
@@ -148,7 +148,7 @@ This example shows how to make predictions for multiple query points.
 ```julia
 # Fit a GMM
 data = randn(2, 1000)
-gmm = fit(EM(3), data)
+gmm = fit(MixtureSpec(FullCovariance(), 3), EM(), data)
 
 # Predict for multiple query points
 query_points = [[0.5], [-0.2], [1.1]]

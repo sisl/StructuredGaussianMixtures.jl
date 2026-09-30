@@ -3,26 +3,11 @@ __precompile__(false)
 module StructuredGaussianMixtures
 
 using Distributions
+import Distributions: fit
 using LinearAlgebra
 using Statistics
 using Random
 using Arpack: eigs
-using GaussianMixtures
-import GaussianMixtures: covar
-using Clustering
-
-## conversion to MixtureModel since GaussianMixtures.jl fails for d=1
-function Distributions.MixtureModel(gmm::GMM{T}) where {T<:AbstractFloat}
-    # if gmm.d == 1
-    #     mixtures = [Normal(gmm.μ[i,1], covar(gmm.Σ[i])) for i=1:gmm.n]
-    if kind(gmm) == :full
-        mixtures = [MvNormal(vec(gmm.μ[i, :]), covar(gmm.Σ[i])) for i in 1:(gmm.n)]
-    else
-        mixtures = [MvNormal(vec(gmm.μ[i, :]), sqrt.(vec(gmm.Σ[i, :]))) for i in 1:(gmm.n)]
-    end
-    return MixtureModel(mixtures, gmm.w)
-end
-
 include("factoroperations.jl")
 include("lrdmvnormal.jl")
 export LRDMvNormal, rank, low_rank_factor, diagonal
@@ -30,8 +15,18 @@ export LRDMvNormal, rank, low_rank_factor, diagonal
 include("latentmvnormal.jl")
 export LatentMvNormal, loading, latent_covariance_factor, latent_covariance
 
+include("fitspecs.jl")
+include("fitdata.jl")
+include("covariancefit.jl")
+include("initialization.jl")
+include("em.jl")
 include("fit.jl")
-export fit, GMMFitMethod, EM, PCAEM, FactorEM
+include("pca.jl")
+export fit, fit!, initialize, workspace, responsibilities
+export FullCovariance,
+    DiagonalCovariance, LowRankDiagonal, LatentCovariance, MixtureSpec, Tied
+export Exact, CovarianceEM, EM, PCAEM, KMeansInit, RandomInit, RandomLoading
+export FitReport, GaussianWorkspace, MixtureWorkspace, PCAWorkspace
 
 include("predict.jl")
 export predict, marginal

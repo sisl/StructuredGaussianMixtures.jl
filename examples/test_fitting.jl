@@ -1,4 +1,3 @@
-using GaussianMixtures
 using Distributions
 using LinearAlgebra
 using MultivariateStats
@@ -21,33 +20,36 @@ function compare_methods_pca(true_gmm, n_components, n_rank; run_pca=true, n_sam
 
     # Fit using EM
     @info "Fitting EM model"
-    fitmethod = EM(n_components)
-    @time gmm_full = StructuredGaussianMixtures.fit(fitmethod, data)
+    spec = MixtureSpec(FullCovariance(), n_components)
+    fitmethod = EM()
+    @time gmm_full = StructuredGaussianMixtures.fit(spec, fitmethod, data)
     gmm_full_samples = rand(gmm_full, n_samples)
 
     # Fit using PCAEM
     @info "Fitting PCAEM model"
-    fitmethod = PCAEM(n_components, n_rank)
-    @time gmm_pca = StructuredGaussianMixtures.fit(fitmethod, data)
+    spec = MixtureSpec(LatentCovariance(n_rank), n_components; tied=Tied(:F, :D))
+    fitmethod = PCAEM()
+    @time gmm_pca = StructuredGaussianMixtures.fit(spec, fitmethod, data)
     gmm_pca_samples = rand(gmm_pca, n_samples)
 
-    # Fit using FactorEM
-    @info "Fitting FactorEM model"
-    fitmethod = FactorEM(n_components, n_rank; initialization_method=:rand)
-    @time gmm_factor = StructuredGaussianMixtures.fit(fitmethod, data)
+    # Fit using LRD EM
+    @info "Fitting LRD EM model"
+    spec = MixtureSpec(LowRankDiagonal(n_rank), n_components)
+    fitmethod = EM(; covariance_method=CovarianceEM(), init=RandomInit())
+    @time gmm_factor = StructuredGaussianMixtures.fit(spec, fitmethod, data)
     gmm_factor_samples = rand(gmm_factor, n_samples)
 
     # print the JSD between the true model and the three models
     test_data = rand(true_gmm, n_samples ÷ 5)
     println("EM Avg. Training FF: ", mean(logpdf(gmm_full, data)))
     println("PCAEM Avg. Training FF: ", mean(logpdf(gmm_pca, data)))
-    println("FactorEM Avg. Training FF: ", mean(logpdf(gmm_factor, data)))
+    println("LRD EM Avg. Training FF: ", mean(logpdf(gmm_factor, data)))
     println("EM Avg. Test FF: ", mean(logpdf(gmm_full, test_data)))
     println("PCAEM Avg. Test FF: ", mean(logpdf(gmm_pca, test_data)))
-    println("FactorEM Avg. Test FF: ", mean(logpdf(gmm_factor, test_data)))
+    println("LRD EM Avg. Test FF: ", mean(logpdf(gmm_factor, test_data)))
     println("EM|True JSD: ", mc_jsd(true_gmm, gmm_full))
     println("PCAEM|True JSD: ", mc_jsd(true_gmm, gmm_pca))
-    println("FactorEM|True JSD: ", mc_jsd(true_gmm, gmm_factor))
+    println("LRD EM|True JSD: ", mc_jsd(true_gmm, gmm_factor))
 
     # plot samples from the three models
     if run_pca
@@ -107,10 +109,10 @@ function compare_methods_pca(true_gmm, n_components, n_rank; run_pca=true, n_sam
         gmm_factor_samples[1, :],
         gmm_factor_samples[2, :];
         alpha=0.6,
-        title="FactorEM Model",
+        title="LRD EM Model",
         xlabel=xlabel,
         ylabel=ylabel,
-        label="FactorEM samples",
+        label="LRD EM samples",
         markersize=2,
         margin=5Plots.mm,
         xlims=x_lims,

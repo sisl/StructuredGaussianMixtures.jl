@@ -47,7 +47,7 @@ function predict(
     μ₂₁ = μ₂ + Σ₂₁ * (Σ₁₁ \ (x - μ₁))
 
     # Return the conditional distribution
-    return MvNormal(μ₂₁, Σ₂₂₁)
+    return MvNormal(μ₂₁, Symmetric(Σ₂₂₁))
 end
 
 """
@@ -253,4 +253,14 @@ function predict(
     input_indices_vec = collect(input_indices)
     output_indices_vec = collect(output_indices)
     return predict(dist, x, input_indices_vec, output_indices_vec)
+end
+
+"""
+    marginal(dist::MultivariateMixture, indices)
+
+Marginalize each component over the selected coordinates, preserving mixture
+probabilities. Component index validation and ownership rules apply.
+"""
+function marginal(dist::MultivariateMixture, indices::Union{Vector{Int},AbstractRange})
+    return MixtureModel([marginal(c, indices) for c in components(dist)], copy(probs(dist)))
 end

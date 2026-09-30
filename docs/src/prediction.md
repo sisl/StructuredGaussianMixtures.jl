@@ -30,7 +30,7 @@ using StructuredGaussianMixtures
 
 # Fit a GMM
 data = randn(2, 1000)
-gmm = fit(EM(3), data)
+gmm = fit(MixtureSpec(FullCovariance(), 3), EM(), data)
 
 # Make predictions
 query_point = [0.5]  # Observed value for first dimension
@@ -68,6 +68,7 @@ StructuredGaussianMixtures.predict(::Union{MvNormal,LRDMvNormal,LatentMvNormal,M
 ### Marginal Distribution
 
 ```@docs
+StructuredGaussianMixtures.marginal(::MultivariateMixture, ::Union{Vector{Int},AbstractRange})
 StructuredGaussianMixtures.marginal(::MvNormal, ::Union{AbstractRange,Vector{Int}})
 StructuredGaussianMixtures.marginal(::LRDMvNormal, ::Union{AbstractRange,Vector{Int}})
 ```
@@ -79,7 +80,7 @@ StructuredGaussianMixtures.marginal(::LRDMvNormal, ::Union{AbstractRange,Vector{
 ```julia
 # Fit a GMM
 data = randn(2, 1000)
-gmm = fit(EM(3), data)
+gmm = fit(MixtureSpec(FullCovariance(), 3), EM(), data)
 
 # Make prediction
 x_query = [0.5]
@@ -95,7 +96,7 @@ println("Posterior mean: ", mean(samples))
 ```julia
 # Fit a high-dimensional GMM
 data = randn(10, 1000)
-gmm = fit(PCAEM(3, 3), data)
+gmm = fit(MixtureSpec(LatentCovariance(3), 3; tied=Tied(:F,:D)), PCAEM(), data)
 
 # Predict multiple dimensions
 observed_dims = [1, 3, 5]
@@ -116,7 +117,7 @@ println("Predicted dimensions shape: ", size(samples))
 ```julia
 # Fit a 5D GMM
 data = randn(5, 1000)
-gmm = fit(EM(3), data)
+gmm = fit(MixtureSpec(FullCovariance(), 3), EM(), data)
 
 # Observe dimensions 1 and 3, predict dimensions 2, 4, and 5
 observed_values = [0.5, -0.2]

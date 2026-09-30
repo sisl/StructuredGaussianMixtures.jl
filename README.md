@@ -7,46 +7,36 @@
 
 ### Overview
 
-This package implements fitting and conditional prediction for Gaussian Mixture Models (GMM). Given a matrix of data $X$ of shape $(n_{features}, n_{samples})$, the method `fit(::GMMFitMethod, X)` returns a fitted GMM as a `Distributions.MixtureModel`. Given a fitted GMM, the method `predict(gmm, x; input_indices=1:length(x), output_indices=length(x)+1:length(gmm))` returns a posterior GMM over the output dimensions conditioned on the observed vector `x` at the input indices.
+Fit weighted single Gaussians and Gaussian mixtures with separate structure and
+method specifications. Observations are columns of a features × samples matrix.
+Fitted models support `logpdf`, sampling, marginalization and conditional `predict`.
 
-This package supports efficient fitting of low-rank-plus-diagonal GMMs, i.e. those with covariance structure $Σ = FF' + D$ with low-rank factors $F$ and diagonals $D$. To do so, this package implements a `LRDMvNormal <: Distributions.AbstractMvNormal` class with efficient marginal, conditional, and `logpdf` calculations. 
+```julia
+using StructuredGaussianMixtures, Random
+X = randn(MersenneTwister(1), 10, 500)
+spec = MixtureSpec(LowRankDiagonal(2), 4)
+method = EM(covariance_method=CovarianceEM(maxiter=20), n_init=3)
+gmm = fit(spec, method, X; rng=MersenneTwister(2))
+posterior = predict(gmm, [0.2, -0.1], [1, 2], [3, 4])
 
-This package currently implements three `GMMFitMethod`s.
+# A single Gaussian uses the covariance solver directly.
+gaussian = fit(FullCovariance(), Exact(), X)
 
-- **FactorEM** fits a mixture of factor analyzers using Expectation Maximization (EM), fitting GMMs with covariance matrices constrained to the form $Σ = FF' + D$, where F is a low-rank factor matrix and D is diagonal. During Maximization, $F$ and $D$ are updated with an inner EM routine -- the full covariance is never formed or inverted. This method is effective for high-dimensional data, or data where the number of features exceeds the number of samples. This method also currently supports fitting weighted data.
-
-- **EM** fits a GMM with full-rank covariance using a standard Expectation Maximization procedure from  `GaussianMixtures.jl`. 
-
-- **PCAEM** fit a low-rank-plus-diagonal GMM by compressing the data using PCA, fitting a GMM in the reduced space, transforming back, and adding residuals to the diagonals. It now returns `LatentMvNormal(μ, F, d, A_factor)` components with covariance `F*A_factor*A_factor'*F' + Diagonal(d)`, preserving the PCA basis and latent covariance separately. FactorEM continues to return `LRDMvNormal` components. See [the latent Gaussian guide](docs/src/latentmvnormal.md) for usage and migration.
-
-### Installation
-
-This package can be installed using the Julia package manager
-
-```
-using Pkg
-Pkg.add('StructuredGaussianMixtures')
-```
-
-### Usage
-
-Given a data matrix `X`, fit a 4-component, rank-2 mixture of factor analyzers with:
-```
-using StructuredGaussianMixtures
-fit_method = FactorEM(4, 2)
-gmm = fit(fit_method, X)
+# Explicit initialized state for continuation; fit! never reinitializes.
+state = workspace(spec, method, gmm)
+fit!(state, method, X)
+state.report
 ```
 
-Alternatively, fit a GMM on weighted data with weights `w`:
-```
-gmm = fit(fit_method, X, w)
-```
+- `FullCovariance()` and `DiagonalCovariance()` use `Exact()` covariance updates.
+- `LowRankDiagonal(r)` uses `CovarianceEM()` without forming a dense covariance.
+- `LatentCovariance(r)` with `Tied(:F,:D)` uses `PCAEM(latent_method=EM(...))`.
+  It retains the PCA loading and component latent covariances in `LatentMvNormal`.
+- All fitting paths accept `weights=...` and fresh fits accept `rng=...`.
+- Native `EM` provides convergence reports, restarts and weighted updates.
+  `responsibilities(gmm, X)` returns posterior membership probabilities;
+  `predict` continues to mean conditional prediction.
 
-Condition the distributions with:
-```
-x_obs = rand(5)
-posterior_a = predict(gmm, x_obs) # p(x_{6:n_features} | x_{1:5} = x_obs)
-posterior_b = predict(gmm, x_obs, 6:10, 1:3) # p(x_{1:3} | x_{6:10} = x_obs)
-```
-
-See the `examples` folder for example usage (note to  `] dev ..` in the `examples` environment to add `StructuredGaussianMixtures` in development mode).
+Install with `Pkg.add("StructuredGaussianMixtures")`. See the
+[fitting guide](docs/src/fitting.md) for the API, supported combinations,
+initialization and migration from the former EM/FactorEM/PCAEM interface.

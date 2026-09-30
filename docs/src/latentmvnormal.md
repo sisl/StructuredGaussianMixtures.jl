@@ -74,8 +74,8 @@ Mixture prediction updates component weights using the observed marginal densiti
 
 ## PCAEM migration
 
-`fit(PCAEM(...), X)` now returns a mixture of `LatentMvNormal` components;
-`FactorEM` still returns `LRDMvNormal` components. PCAEM estimates a shared PCA
+`fit(MixtureSpec(LatentCovariance(r), k; tied=Tied(:F,:D)), PCAEM(), X)` now returns a mixture of `LatentMvNormal` components;
+`EM(covariance_method=CovarianceEM())` with `LowRankDiagonal(r)` returns `LRDMvNormal` components. PCAEM estimates a shared PCA
 basis `P`, shared reconstruction-residual variances `d`, and reduced-space means
 `m_k` and covariances `A_k`. Its components retain
 `μ_k = μ_global + P * m_k`, `F_k = P`, and `A_factor_k * A_factor_k' = A_k` explicitly.
