@@ -175,17 +175,17 @@ For a distribution with $m$ features and rank $r$:
 
 ## Integration with GMMs
 
-FactorEM returns `LRDMvNormal`; PCAEM returns [`LatentMvNormal`](@ref), which keeps the PCA basis and latent covariance separate:
+LRD covariance EM returns `LRDMvNormal`; PCAEM returns [`LatentMvNormal`](@ref), which keeps the PCA basis and latent covariance separate:
 
 ```julia
 # PCAEM creates LatentMvNormal components
-gmm = fit(PCAEM(3, 5), data)
+gmm = fit(MixtureSpec(LatentCovariance(5), 3; tied=Tied(:F,:D)), PCAEM(), data)
 for comp in components(gmm)
     println("Component rank: ", rank(comp))
 end
 
-# FactorEM also creates LRDMvNormal components
-gmm = fit(FactorEM(3, 5), data)
+# LRD covariance EM creates LRDMvNormal components
+gmm = fit(MixtureSpec(LowRankDiagonal(5), 3), EM(covariance_method=CovarianceEM()), data)
 for comp in components(gmm)
     println("Component rank: ", rank(comp))
 end

@@ -17,11 +17,9 @@ Pkg.add("StructuredGaussianMixtures")
 
 ## Methods
 
-This package implements three main fitting methods for Gaussian Mixture Models:
-
-- **FactorEM** uses EM to fit a GMM with low-rank-plus-diagonal covariance structure $\Sigma = FF' + D$, using an inner EM step to update the covariance components. This is the only method that currently supports weighted fitting
-- **EM** uses standard EM to fit a GMM with full rank convariance
-- **PCAEM** fits a GMM with low-rank-plus-diagonal covariance structure by fitting a full-rank GMM on PCA-compressed data
+Structure and method are separate: full/diagonal covariances use exact updates,
+low-rank covariances use inner covariance EM, and PCAEM fits projected mixtures.
+All support weighted data. Single-Gaussian fitting reuses the covariance solvers.
 
 ## Quick Start
 
@@ -31,7 +29,7 @@ using StructuredGaussianMixtures
 # Fit a GMM using EM
 data = randn(100, 1000)  # 100D data with 1000 samples
 w = rand(1000) # weights on data 
-gmm = fit(FactorEM(3,5), data, w)  # 3-component rank-5 low-rank-plus-diagonal GMM
+gmm = fit(MixtureSpec(LowRankDiagonal(5), 3), EM(covariance_method=CovarianceEM()), data; weights=w)  # 3-component rank-5 low-rank-plus-diagonal GMM
 
 # Make predictions
 query_point = [0.5]
@@ -40,7 +38,7 @@ posterior = predict(gmm, query_point)  # Posterior over dimensions 2:100 when x1
 
 ## Documentation and API Reference sections
 
-- **[Fitting Methods](@ref)**: Learn about the different fitting algorithms and when to use each
+- **[Fitting](@ref)**: Learn about the different fitting algorithms and when to use each
     - **[Structured Gaussians](@ref)**: Learn about the structured Gaussians underpinning this project  
 - **[Prediction](@ref)**: Understand conditional prediction and posterior computation
 - **[Examples](@ref)**: Complete working examples from the test files

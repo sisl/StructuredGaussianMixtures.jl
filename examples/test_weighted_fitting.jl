@@ -1,4 +1,3 @@
-using GaussianMixtures
 using Distributions
 using LinearAlgebra
 using MultivariateStats
@@ -31,17 +30,18 @@ data = rand(true_gmm, n_samples)
 # Assign weights: 1 if x1 <= 0, 0 otherwise
 weights = [data[1, i] <= 0 ? 1.0 : 0.0 for i in 1:n_samples]
 
-# Fit a 2-component rank-1 GMM using FactorEM with weights
-@info "Fitting weighted FactorEM model"
-fitmethod = FactorEM(2, 1; initialization_method=:kmeans, nInit=10, nIter=20)
-@time gmm_weighted = StructuredGaussianMixtures.fit(fitmethod, data, weights)
+# Fit a 2-component rank-1 GMM using LRD EM with weights
+@info "Fitting weighted LRD EM model"
+spec = MixtureSpec(LowRankDiagonal(1), 2)
+fitmethod = EM(; covariance_method=CovarianceEM(), n_init=10, maxiter=20)
+@time gmm_weighted = StructuredGaussianMixtures.fit(spec, fitmethod, data; weights)
 
 # Print results
 println("Number of samples with weight 1: ", sum(weights))
 println("Number of samples with weight 0: ", sum(weights .== 0))
-println("Weighted FactorEM Avg. Training FF: ", mean(logpdf(gmm_weighted, data)))
+println("Weighted LRD EM Avg. Training FF: ", mean(logpdf(gmm_weighted, data)))
 println(
-    "Weighted FactorEM Avg. Training FF (weighted): ",
+    "Weighted LRD EM Avg. Training FF (weighted): ",
     sum(weights .* logpdf(gmm_weighted, data)) / sum(weights),
 )
 

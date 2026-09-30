@@ -119,12 +119,18 @@ using StructuredGaussianMixtures
     @testset "PCAEM decomposition and ownership" begin
         X = randn(rng, 9, 150)
         P, μ = StructuredGaussianMixtures._truncated_pca(X, 3)
-        D = vec(var(X - (P * (P' * (X .- μ)) .+ μ); dims=2))
+        D = vec(var(X - (P * (P' * (X .- μ)) .+ μ); dims=2, corrected=false))
         # Re-run the reduced-space fit with the same seed to verify the mapping.
         Random.seed!(97)
-        reduced = StructuredGaussianMixtures.fit(EM(2; nInit=2, nIter=3), P' * (X .- μ))
+        reduced = StructuredGaussianMixtures.fit(
+            MixtureSpec(FullCovariance(), 2), EM(maxiter=3), P' * (X .- μ)
+        )
         Random.seed!(97)
-        model = StructuredGaussianMixtures.fit(PCAEM(2, 3; gmm_nInit=2, gmm_nIter=3), X)
+        model = StructuredGaussianMixtures.fit(
+            MixtureSpec(LatentCovariance(3), 2; tied=Tied(:F, :D)),
+            PCAEM(latent_method=EM(maxiter=3)),
+            X,
+        )
         for (g, z) in zip(components(model), components(reduced))
             @test g isa LatentMvNormal
             @test loading(g) ≈ P

@@ -1,4 +1,3 @@
-using GaussianMixtures
 using Distributions
 using LinearAlgebra
 using MultivariateStats
@@ -17,9 +16,13 @@ true_Fs = [randn(n_features, n_features) for _ in 1:n_components]
 true_covs = [true_Fs[i] * true_Fs[i]' for i in 1:n_components]
 true_gmm = MixtureModel(MvNormal.(true_means, true_covs), true_probs)
 data = rand(true_gmm, 1000)
-gmm_full = StructuredGaussianMixtures.fit(EM(n_components), data)
+gmm_full = StructuredGaussianMixtures.fit(
+    MixtureSpec(FullCovariance(), n_components), EM(), data
+)
 gmm_full_samples = rand(gmm_full, 1000)
-gmm_pca = StructuredGaussianMixtures.fit(PCAEM(n_components, 1), data)
+gmm_pca = StructuredGaussianMixtures.fit(
+    MixtureSpec(LatentCovariance(1), n_components; tied=Tied(:F, :D)), PCAEM(), data
+)
 gmm_pca_samples = rand(gmm_pca, 1000)
 x_query = data[1:1, 1]
 posterior_full = StructuredGaussianMixtures.predict(gmm_full, x_query)
