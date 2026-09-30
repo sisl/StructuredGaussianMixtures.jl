@@ -8,7 +8,7 @@ The `LRDMvNormal` distribution represents a multivariate normal distribution wit
 
 - F is a low-rank factor matrix of size $m \times r$ where $r \ll m$
 - D is a diagonal matrix
-- The full covariance matrix is never explicitly formed for efficiency
+- The full covariance matrix is only formed when explicitly requested via `cov`
 
 This structure is particularly useful in the following circumstances:
 
@@ -34,6 +34,10 @@ F = randn(10, 3)        # Low-rank factor (10×3)
 D = ones(10)            # Diagonal vector
 dist = LRDMvNormal(μ, F, D)
 ```
+
+Inputs are copied into owned `Float64` arrays. Accessors return independent values;
+mutating their results no longer mutates the distribution. The existing `.F` loading field is retained. See [Common interface and compatibility](@ref) for the
+aligned accessors, validation rules and migration details.
 
 ## Distribution Interface
 
@@ -171,10 +175,10 @@ For a distribution with $m$ features and rank $r$:
 
 ## Integration with GMMs
 
-The `LRDMvNormal` distribution is used internally by `PCAEM` and `FactorEM` methods:
+FactorEM returns `LRDMvNormal`; PCAEM returns [`LatentMvNormal`](@ref), which keeps the PCA basis and latent covariance separate:
 
 ```julia
-# PCAEM creates LRDMvNormal components
+# PCAEM creates LatentMvNormal components
 gmm = fit(PCAEM(3, 5), data)
 for comp in components(gmm)
     println("Component rank: ", rank(comp))

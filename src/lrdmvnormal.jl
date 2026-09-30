@@ -12,7 +12,9 @@ and D is a diagonal matrix.
 - `rank`: Rank of the low-rank component
 
 # Notes
-- The covariance matrix is never explicitly formed
+- Inputs are copied into owned `Float64` arrays; accessors return independent values.
+- Fields are implementation details; internal fitting routines update owned parameters.
+- The covariance matrix is only explicitly formed when requested with `cov`
 - All operations use the low-rank plus diagonal structure for efficiency
 """
 struct LRDMvNormal <: Distributions.AbstractMvNormal
@@ -21,13 +23,20 @@ struct LRDMvNormal <: Distributions.AbstractMvNormal
     D::Vector{Float64}  # diagonal vector
     rank::Int          # rank of the low-rank component
 
-    function LRDMvNormal(μ::Vector{Float64}, F::Matrix{Float64}, D::Vector{Float64})
+    function LRDMvNormal(μ::AbstractVector, F::AbstractMatrix, D::AbstractVector)
         length(μ) == size(F, 1) == length(D) ||
             throw(DimensionMismatch("Dimensions of μ, F, and D must match"))
-        length(D) > size(F, 2) ||
-            throw(ArgumentError("Rank of F must be less than the number of features"))
-        all(d -> d > 0, D) || throw(ArgumentError("All diagonal elements must be positive"))
-        return new(μ, F, D, size(F, 2))
+        length(D) > size(F, 2) || throw(
+            ArgumentError("Latent dimension must be less than the number of features")
+        )
+        μ_copy = Vector{Float64}(μ)
+        F_copy = Matrix{Float64}(F)
+        D_copy = Vector{Float64}(D)
+        all(isfinite, μ_copy) && all(isfinite, F_copy) ||
+            throw(ArgumentError("Mean and loading must be finite"))
+        all(x -> isfinite(x) && x > 0, D_copy) ||
+            throw(ArgumentError("Diagonal variances must be positive and finite"))
+        return new(μ_copy, F_copy, D_copy, size(F, 2))
     end
 end
 
@@ -68,27 +77,7 @@ Uses the matrix inversion lemma for efficient computation.
 - Computes the determinant efficiently: det(F*F' + D) = det(D) * det(I + F'*D^(-1)*F)
 """
 function Distributions.logpdf(d::LRDMvNormal, x::AbstractVector)
-    # Center the data
-    x_centered = x - d.μ
-
-    # Compute the precision matrix efficiently using the matrix inversion lemma
-    # (F*F' + D)^(-1) = D^(-1) - D^(-1)*F*(I + F'*D^(-1)*F)^(-1)*F'*D^(-1)
-    D_inv = 1 ./ d.D
-    F_scaled = d.F .* sqrt.(D_inv)
-    I_plus_FF = I + F_scaled' * F_scaled
-
-    # Compute the determinant efficiently
-    # det(F*F' + D) = det(D) * det(I + F'*D^(-1)*F)
-    logdet_cov = sum(log.(d.D)) + logdet(I_plus_FF)
-
-    # Compute the quadratic form efficiently with block elimination
-    # quad_form = dot(x_centered, precision * x_centered)
-    y = (I_plus_FF \ F_scaled') * (sqrt.(D_inv) .* x_centered)
-    eta = D_inv .* (x_centered - d.F * y)
-    quad_form = dot(x_centered, eta)
-
-    # Return the log PDF
-    return -0.5 * (length(d.μ) * log(2π) + logdet_cov + quad_form)
+    return _factor_logpdf(d.μ, d.D, _prepare_factor(d.F, d.D), x)
 end
 
 """
@@ -170,9 +159,9 @@ end
 """
     mean(d::LRDMvNormal)
 
-Return the mean vector of the distribution.
+Return a copy of the mean vector of the distribution.
 """
-Distributions.mean(d::LRDMvNormal) = d.μ
+Distributions.mean(d::LRDMvNormal) = copy(d.μ)
 
 """
     cov(d::LRDMvNormal)
@@ -184,7 +173,7 @@ Distributions.cov(d::LRDMvNormal) = _covariance(d)
 """
     rank(d::LRDMvNormal)
 
-Return the rank of the low-rank component.
+Return the stored latent dimension, not the numerical matrix rank.
 """
 function rank(d::LRDMvNormal)
     return d.rank
@@ -193,17 +182,22 @@ end
 """
     low_rank_factor(d::LRDMvNormal)
 
-Return the low-rank factor matrix F.
+Return a copy of the effective low-rank factor `F`.
 """
 function low_rank_factor(d::LRDMvNormal)
-    return d.F
+    return copy(d.F)
 end
 
 """
     diagonal(d::LRDMvNormal)
 
-Return the diagonal vector D.
+Return a copy of the residual variance vector `D`.
 """
 function diagonal(d::LRDMvNormal)
-    return d.D
+    return copy(d.D)
+end
+
+# Batch preparation shares the same small factorization across observations.
+function Distributions.logpdf(d::LRDMvNormal, X::AbstractMatrix)
+    return _factor_logpdf(d.μ, d.D, _prepare_factor(d.F, d.D), X)
 end

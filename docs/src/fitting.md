@@ -46,9 +46,9 @@ gmm = fit(fitmethod, data)
 StructuredGaussianMixtures.fit(::EM, ::Matrix)
 ```
 
-## PCAEM: Mixture of Probabilistic Principal Component Analysis
+## PCAEM: Mixture in PCA Space
 
-PCAEM fits a GMM in PCA-reduced space and transforms back to the original space, effectively learning low-rank covariance structures.
+PCAEM fits a GMM in PCA-reduced space and transforms back to the original space. It returns `LatentMvNormal` components retaining the common PCA basis, component-specific latent covariance factors, and common residual variances. Their means lie in the affine PCA subspace. The PCA basis and residual variances are estimated once, not jointly optimized with the mixture. See [Explicit Latent Gaussians](@ref) for migration details.
 
 ### Constructor
 

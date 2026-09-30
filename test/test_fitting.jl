@@ -5,7 +5,8 @@ using Distributions
 using StructuredGaussianMixtures
 using GaussianMixtures
 using Statistics
-using MultivariateStats: PCA, fit as pca_fit, projection, mean as pca_mean, predict as pca_predict, reconstruct
+using MultivariateStats:
+    PCA, fit as pca_fit, projection, mean as pca_mean, predict as pca_predict, reconstruct
 
 @testset "Fitting Methods" begin
     # Set random seed for reproducibility
@@ -81,9 +82,9 @@ using MultivariateStats: PCA, fit as pca_fit, projection, mean as pca_mean, pred
         @test length(gmm.prior.p) == 3
         @test sum(gmm.prior.p) ≈ 1.0 atol = 1e-10
 
-        # Test that components are LRDMvNormal
+        # Test that components are LatentMvNormal
         for comp in gmm.components
-            @test comp isa LRDMvNormal
+            @test comp isa LatentMvNormal
             @test StructuredGaussianMixtures.rank(comp) == 5
         end
 

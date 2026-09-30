@@ -54,7 +54,9 @@ end
     predict(dist::LRDMvNormal, x::AbstractVector, input_indices::Union{Vector{Int},AbstractRange}, output_indices::Union{Vector{Int},AbstractRange})
 
 Compute the conditional distribution of the output indices given the input indices using the Schur complement.
-Returns a new LRDMvNormal distribution representing the conditional distribution.
+Returns a new LRDMvNormal, or a dense MvNormal when the output dimension is no
+larger than the stored latent dimension. Inputs and outputs must be unique, in
+bounds and disjoint; outputs must be nonempty. Empty inputs return the marginal.
 This implementation is efficient for low-rank plus diagonal covariance structure.
 
 # Arguments
@@ -72,13 +74,14 @@ function predict(
     input_indices::Union{Vector{Int},AbstractRange},
     output_indices::Union{Vector{Int},AbstractRange},
 )
-    d = length(dist.μ)
-
-    # Verify indices are valid
-    all(i -> 1 ≤ i ≤ d, input_indices) ||
-        throw(ArgumentError("Input indices out of bounds"))
-    all(i -> 1 ≤ i ≤ d, output_indices) ||
-        throw(ArgumentError("Output indices out of bounds"))
+    input_indices = _structured_indices(dist, input_indices)
+    output_indices = _structured_indices(dist, output_indices)
+    length(x) == length(input_indices) ||
+        throw(DimensionMismatch("Observed values and indices must match"))
+    isempty(output_indices) && throw(ArgumentError("Output indices must be nonempty"))
+    isempty(intersect(input_indices, output_indices)) ||
+        throw(ArgumentError("Input and output indices must be disjoint"))
+    isempty(input_indices) && return marginal(dist, output_indices)
 
     # Split the mean vector
     μ₁ = dist.μ[input_indices]
@@ -147,7 +150,8 @@ end
     marginal(dist::LRDMvNormal, indices::Union{Vector{Int},AbstractRange})
 
 Compute the marginal distribution over the specified indices.
-Returns a new LRDMvNormal distribution representing the marginal.
+Returns a new LRDMvNormal, or a dense MvNormal for small output dimensions.
+Indices must be unique, in bounds and nonempty. Returned parameters are independent.
 
 # Arguments
 - `dist`: The low-rank plus diagonal multivariate normal distribution
@@ -157,6 +161,8 @@ Returns a new LRDMvNormal distribution representing the marginal.
 - A new LRDMvNormal distribution representing the marginal
 """
 function marginal(dist::LRDMvNormal, indices::Union{Vector{Int},AbstractRange})
+    indices = _structured_indices(dist, indices)
+    isempty(indices) && throw(ArgumentError("Marginal indices must be nonempty"))
     μ = dist.μ[indices]
 
     # If the number of indices is less than or equal to the rank, use full rank
@@ -221,7 +227,7 @@ function predict(
 end
 
 """
-    predict(dist::Union{MvNormal,LRDMvNormal,MultivariateMixture}, x::AbstractVector; 
+    predict(dist::Union{MvNormal,LRDMvNormal,LatentMvNormal,MultivariateMixture}, x::AbstractVector;
            input_indices::Union{Vector{Int},AbstractRange} = 1:length(x), 
            output_indices::Union{Vector{Int},AbstractRange} = length(x)+1:length(mean(dist)))
 
@@ -229,7 +235,7 @@ Compute the conditional distribution of the output indices given the input indic
 Returns a new distribution representing the conditional distribution.
 
 # Arguments
-- `dist`: The multivariate normal distribution (MvNormal or LRDMvNormal)
+- `dist`: The multivariate normal distribution (MvNormal, LRDMvNormal or LatentMvNormal)
 - `x`: The observed values for the input indices
 - `input_indices`: The indices of the observed variables (default: first length(x) indices)
 - `output_indices`: The indices of the variables to predict (default: remaining indices)
@@ -238,7 +244,7 @@ Returns a new distribution representing the conditional distribution.
 - A new distribution representing the conditional distribution
 """
 function predict(
-    dist::Union{MvNormal,LRDMvNormal,MultivariateMixture},
+    dist::Union{MvNormal,LRDMvNormal,LatentMvNormal,MultivariateMixture},
     x::AbstractVector;
     input_indices::Union{Vector{Int},AbstractRange}=1:length(x),
     output_indices::Union{Vector{Int},AbstractRange}=(length(x) + 1):length(mean(dist)),
