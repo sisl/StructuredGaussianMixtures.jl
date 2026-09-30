@@ -5,34 +5,34 @@
 data = randn(2, 1000)
 
 # Fit with different methods
-gmm_em = fit(EM(3), data)
-gmm_pca = fit(PCAEM(3, 1), data)
-gmm_factor = fit(FactorEM(3, 1), data)
+gmm_em = fit(MixtureSpec(FullCovariance(), 3), EM(), data)
+gmm_pca = fit(MixtureSpec(LatentCovariance(1), 3; tied=Tied(:F,:D)), PCAEM(), data)
+gmm_factor = fit(MixtureSpec(LowRankDiagonal(1), 3), EM(covariance_method=CovarianceEM()), data)
 
 # Evaluate performance
 println(&quot;EM log-likelihood: &quot;, mean(logpdf(gmm_em, data)))
 println(&quot;PCAEM log-likelihood: &quot;, mean(logpdf(gmm_pca, data)))
-println(&quot;FactorEM log-likelihood: &quot;, mean(logpdf(gmm_factor, data)))</code></pre><h2 id="Example-2:-High-Dimensional-Data"><a class="docs-heading-anchor" href="#Example-2:-High-Dimensional-Data">Example 2: High-Dimensional Data</a><a id="Example-2:-High-Dimensional-Data-1"></a><a class="docs-heading-anchor-permalink" href="#Example-2:-High-Dimensional-Data" title="Permalink"></a></h2><p>This example demonstrates the effectiveness of low-rank methods for high-dimensional data.</p><pre><code class="language-julia hljs"># High-dimensional data
+println(&quot;LRD EM log-likelihood: &quot;, mean(logpdf(gmm_factor, data)))</code></pre><h2 id="Example-2:-High-Dimensional-Data"><a class="docs-heading-anchor" href="#Example-2:-High-Dimensional-Data">Example 2: High-Dimensional Data</a><a id="Example-2:-High-Dimensional-Data-1"></a><a class="docs-heading-anchor-permalink" href="#Example-2:-High-Dimensional-Data" title="Permalink"></a></h2><p>This example demonstrates the effectiveness of low-rank methods for high-dimensional data.</p><pre><code class="language-julia hljs"># High-dimensional data
 n_features = 100
 n_samples = 50
 data = randn(n_features, n_samples)
 
 # Compare methods
 println(&quot;Fitting EM model...&quot;)
-@time gmm_em = fit(EM(3), data)
+@time gmm_em = fit(MixtureSpec(FullCovariance(), 3), EM(), data)
 
 println(&quot;Fitting PCAEM model...&quot;)
-@time gmm_pca = fit(PCAEM(3, 10), data)
+@time gmm_pca = fit(MixtureSpec(LatentCovariance(10), 3; tied=Tied(:F,:D)), PCAEM(), data)
 
-println(&quot;Fitting FactorEM model...&quot;)
-@time gmm_factor = fit(FactorEM(3, 10), data)
+println(&quot;Fitting LRD EM model...&quot;)
+@time gmm_factor = fit(MixtureSpec(LowRankDiagonal(10), 3), EM(covariance_method=CovarianceEM()), data)
 
 # Compare performance
 println(&quot;EM log-likelihood: &quot;, mean(logpdf(gmm_em, data)))
 println(&quot;PCAEM log-likelihood: &quot;, mean(logpdf(gmm_pca, data)))
-println(&quot;FactorEM log-likelihood: &quot;, mean(logpdf(gmm_factor, data)))</code></pre><h2 id="Example-3:-Conditional-Prediction"><a class="docs-heading-anchor" href="#Example-3:-Conditional-Prediction">Example 3: Conditional Prediction</a><a id="Example-3:-Conditional-Prediction-1"></a><a class="docs-heading-anchor-permalink" href="#Example-3:-Conditional-Prediction" title="Permalink"></a></h2><p>This example demonstrates how to perform conditional prediction.</p><pre><code class="language-julia hljs"># Fit a GMM
+println(&quot;LRD EM log-likelihood: &quot;, mean(logpdf(gmm_factor, data)))</code></pre><h2 id="Example-3:-Conditional-Prediction"><a class="docs-heading-anchor" href="#Example-3:-Conditional-Prediction">Example 3: Conditional Prediction</a><a id="Example-3:-Conditional-Prediction-1"></a><a class="docs-heading-anchor-permalink" href="#Example-3:-Conditional-Prediction" title="Permalink"></a></h2><p>This example demonstrates how to perform conditional prediction.</p><pre><code class="language-julia hljs"># Fit a GMM
 data = randn(2, 1000)
-gmm = fit(EM(3), data)
+gmm = fit(MixtureSpec(FullCovariance(), 3), EM(), data)
 
 # Make prediction
 x_query = [0.5]
@@ -47,8 +47,8 @@ data = randn(2, 1000)
 # Create weights based on data values
 weights = [data[1, i] &gt; 0 ? 1.0 : 0.5 for i in 1:size(data, 2)]
 
-# Fit with weights (only FactorEM supports this)
-gmm_weighted = fit(FactorEM(3, 1), data, weights)
+# Fit with weights (all fitting paths support weights)
+gmm_weighted = fit(MixtureSpec(LowRankDiagonal(1), 3), EM(covariance_method=CovarianceEM()), data; weights)
 
 # Print results
 println(&quot;Number of samples with weight 1: &quot;, sum(weights .== 1.0))
@@ -77,7 +77,7 @@ println(&quot;Sample shape: &quot;, size(samples))
 log_prob = logpdf(dist, samples[:, 1])
 println(&quot;Log probability: &quot;, log_prob)</code></pre><h2 id="Example-6:-Partial-Prediction"><a class="docs-heading-anchor" href="#Example-6:-Partial-Prediction">Example 6: Partial Prediction</a><a id="Example-6:-Partial-Prediction-1"></a><a class="docs-heading-anchor-permalink" href="#Example-6:-Partial-Prediction" title="Permalink"></a></h2><p>This example shows how to predict specific dimensions.</p><pre><code class="language-julia hljs"># Fit a 5D GMM
 data = randn(5, 1000)
-gmm = fit(EM(3), data)
+gmm = fit(MixtureSpec(FullCovariance(), 3), EM(), data)
 
 # Observe dimensions 1 and 3, predict dimensions 2, 4, and 5
 observed_values = [0.5, -0.2]
@@ -92,7 +92,7 @@ posterior = predict(gmm, observed_values;
 samples = rand(posterior, 100)
 println(&quot;Predicted dimensions shape: &quot;, size(samples))</code></pre><h2 id="Example-7:-Multiple-Query-Points"><a class="docs-heading-anchor" href="#Example-7:-Multiple-Query-Points">Example 7: Multiple Query Points</a><a id="Example-7:-Multiple-Query-Points-1"></a><a class="docs-heading-anchor-permalink" href="#Example-7:-Multiple-Query-Points" title="Permalink"></a></h2><p>This example shows how to make predictions for multiple query points.</p><pre><code class="language-julia hljs"># Fit a GMM
 data = randn(2, 1000)
-gmm = fit(EM(3), data)
+gmm = fit(MixtureSpec(FullCovariance(), 3), EM(), data)
 
 # Predict for multiple query points
 query_points = [[0.5], [-0.2], [1.1]]
@@ -105,4 +105,4 @@ samples = [rand(p, 50) for p in posteriors]
 for (i, (q, s)) in enumerate(zip(query_points, samples))
     println(&quot;Query $i: mean = &quot;, mean(s), &quot;, variance = &quot;, var(s))
 end</code></pre><h2 id="Running-the-Examples"><a class="docs-heading-anchor" href="#Running-the-Examples">Running the Examples</a><a id="Running-the-Examples-1"></a><a class="docs-heading-anchor-permalink" href="#Running-the-Examples" title="Permalink"></a></h2><p>To run these examples:</p><ol><li><p><strong>Install dependencies</strong>:</p><pre><code class="language-julia hljs">using Pkg
-Pkg.add([&quot;StructuredGaussianMixtures&quot;, &quot;Distributions&quot;, &quot;LinearAlgebra&quot;, &quot;Random&quot;, &quot;Statistics&quot;])</code></pre></li><li><p><strong>Load the package</strong>:</p><pre><code class="language-julia hljs">using StructuredGaussianMixtures</code></pre></li><li><p><strong>Run examples</strong>: Copy and paste any example into a Julia session.</p></li></ol></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../prediction/">« Prediction</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Wednesday 30 September 2026 00:14">Wednesday 30 September 2026</span>. Using Julia version 1.13.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+Pkg.add([&quot;StructuredGaussianMixtures&quot;, &quot;Distributions&quot;, &quot;LinearAlgebra&quot;, &quot;Random&quot;, &quot;Statistics&quot;])</code></pre></li><li><p><strong>Load the package</strong>:</p><pre><code class="language-julia hljs">using StructuredGaussianMixtures</code></pre></li><li><p><strong>Run examples</strong>: Copy and paste any example into a Julia session.</p></li></ol></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../prediction/">« Prediction</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Wednesday 30 September 2026 23:52">Wednesday 30 September 2026</span>. Using Julia version 1.13.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
