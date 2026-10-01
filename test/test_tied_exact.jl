@@ -84,6 +84,18 @@ using Test, Random, Distributions, LinearAlgebra, Statistics
         fit!(state, unregularized, X; weights=counts)
         @test minimum(diff(state.report.history)) >= -1e-10
     end
+    extreme=hcat(zeros(2, 2), fill(1e160, 2, 2))
+    initial_extreme=MixtureModel([MvNormal(zeros(2), 1.0), MvNormal(fill(1e160, 2), 1.0)])
+    for structure in (FullCovariance(), DiagonalCovariance(), IsotropicCovariance())
+        spec=MixtureSpec(structure, 2; tied=Tied(:covariance))
+        method=EM(maxiter=1, tol=0)
+        state=workspace(spec, method, initial_extreme)
+        fit!(state, method, extreme)
+        @test state.report.iterations==1
+        @test state.report.status==:iteration_limit
+        @test isfinite(state.report.objective)
+        @test cov(first(components(state.model))) ≈ 1e-6*Matrix(I, 2, 2)
+    end
     independent=fit(
         MixtureSpec(IsotropicCovariance(), 2), EM(maxiter=2), X; rng=MersenneTwister(2)
     )

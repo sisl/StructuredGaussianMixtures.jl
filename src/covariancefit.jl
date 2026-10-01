@@ -108,8 +108,11 @@ function _fit_components(
     p=size(X, 1)
     scatter=s.covariance isa FullCovariance ? zeros(p, p) : zeros(p)
     for k in 1:s.k
-        R=X .- view(means, :, k)
-        w=view(weights, :, k)
+        # Zero responsibility means an observation contributes nothing. Filter it
+        # before centering/squaring to avoid 0*Inf from distant finite samples.
+        indices=findall(>(0), view(weights, :, k))
+        R=view(X, :, indices) .- view(means, :, k)
+        w=weights[indices, k]
         if s.covariance isa FullCovariance
             scatter .+= (R .* w')*R'
         else
