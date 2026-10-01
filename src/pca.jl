@@ -1,7 +1,3 @@
-function _truncated_pca(X::AbstractMatrix, r::Int)
-    return _weighted_pca(X, fill(1/size(X, 2), size(X, 2)), r)
-end
-
 # Weighted PCA uses normalized observation weights. The eigenvectors do not
 # depend on an unbiased-vs-MLE scaling convention.
 function _weighted_pca(X, w, r)
