@@ -35,16 +35,9 @@ function fit!(state::MixtureWorkspace, m::EM, X::AbstractMatrix; weights=nothing
         newcomponents=Distributions.AbstractMvNormal[]
         inner_reports=FitReport[]
         try
-            for j in 1:state.spec.k
-                localstate=GaussianWorkspace(
-                    state.spec.covariance, components(state.model)[j], FitReport()
-                )
-                push!(
-                    newcomponents,
-                    fit!(localstate, m.covariance_method, X; weights=w .* resp[:, j]),
-                )
-                push!(inner_reports, localstate.report)
-            end
+            newcomponents, inner_reports=_fit_components(
+                state.spec, m.covariance_method, components(state.model), X, resp .* w
+            )
             typed_components=Vector{typeof(first(newcomponents))}(newcomponents)
             candidate=MixtureModel(typed_components, mass ./ sum(mass))
             candidate_joints=_logjoints(candidate, X)
