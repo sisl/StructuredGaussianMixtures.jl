@@ -308,9 +308,67 @@ const sgmfit=StructuredGaussianMixtures.fit
         @test_throws ErrorException sgmfit(
             spec, EM(covariance_method=Exact(regularization=0)), zeros(5, 10)
         )
+        # Numerical failure before the first E-step must update diagnostics and
+        # preserve the initialized model, just like failure during an M-step.
+        state=workspace(spec, EM(), g)
+        original=state.model
+        @test fit!(state, EM(), fill(1e200, 5, 3)) === original
+        @test state.report.status==:failed
+        @test occursin("nonfinite", state.report.message)
+        @test state.report.iterations==0
+        @test state.report.objective == -Inf
+        @test isempty(state.report.history)
+        @test isempty(state.inner_reports)
+        @test_throws ArgumentError fit!(state, EM(), fill(NaN, 5, 3))
+
+        # A singular candidate fails without partially committing the M-step.
+        single=MixtureSpec(FullCovariance(), 1)
+        state=workspace(single, EM(), MixtureModel([MvNormal(zeros(5), ones(5))]))
+        original=state.model
+        @test fit!(state, EM(covariance_method=Exact(regularization=0)), zeros(5, 8)) ===
+            original
+        @test state.report.status==:failed
+        @test state.report.iterations==0
+        @test length(state.report.history)==1
+        @test isfinite(state.report.objective)
+
+        # Validation must still reject incompatible models without allocating a
+        # discarded Gaussian workspace; successful copies must be independent.
+        diagonal=MixtureSpec(DiagonalCovariance(), 1)
+        correlated=MvNormal(zeros(2), [2.0 0.5; 0.5 1.0])
+        @test_throws ArgumentError workspace(diagonal, EM(), MixtureModel([correlated]))
+        source=MixtureModel([MvNormal(zeros(2), ones(2))])
+        copied=workspace(diagonal, EM(), source)
+        mean(first(components(copied.model)))[1]=7
+        @test mean(first(components(source)))[1]==0
         @test_throws ArgumentError workspace(
             LowRankDiagonal(2), CovarianceEM(), MvNormal(zeros(5), ones(5))
         )
     end
 end
 include("test_pca_reference.jl")
+
+# A solver can return its last valid iterate while reporting failure. The outer
+# driver must not accept that candidate as a successful mixture update.
+struct FailedCovarianceForTest <: StructuredGaussianMixtures.CovarianceMethod end
+StructuredGaussianMixtures._check(::FullCovariance, ::FailedCovarianceForTest, p) = nothing
+function StructuredGaussianMixtures._covariance(
+    ::FullCovariance, ::FailedCovarianceForTest, current, R, w
+)
+    report=FitReport()
+    report.status=:failed
+    report.message="deliberate inner solver failure"
+    return current, report
+end
+@testset "Reported inner solver failure" begin
+    X=randn(MersenneTwister(61), 3, 12)
+    spec=MixtureSpec(FullCovariance(), 1)
+    initial=MixtureModel([MvNormal(zeros(3), Matrix{Float64}(I, 3, 3))])
+    state=workspace(spec, EM(), initial)
+    original=state.model
+    fit!(state, EM(covariance_method=FailedCovarianceForTest(), maxiter=1), X)
+    @test state.report.status==:failed
+    @test occursin("deliberate inner solver failure", state.report.message)
+    @test state.report.iterations==0
+    @test state.model === original
+end
