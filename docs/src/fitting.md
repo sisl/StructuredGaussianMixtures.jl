@@ -11,12 +11,12 @@ Data matrices are **features × observations**. `fit` returns a fitted distribut
 | `FullCovariance()` | `Exact()` alone, or `EM(covariance_method=Exact())` | `MvNormal` |
 | `DiagonalCovariance()` | `Exact()` alone, or `EM(covariance_method=Exact())` | diagonal `MvNormal` |
 | `LowRankDiagonal(r)` | `CovarianceEM()` alone, or `EM(covariance_method=CovarianceEM())` | `LRDMvNormal` |
-| `LatentCovariance(r)` in `MixtureSpec(...; tied=Tied(:F,:D))` | `PCAEM()` | `LatentMvNormal` components |
+| `LatentCovariance(r)` | `CovarianceEM()` alone | `LatentMvNormal` |
+| `LatentCovariance(r)` in `MixtureSpec(...; tied=Tied(:F,:D))` | `EM(covariance_method=CovarianceEM())` or `PCAEM()` | `LatentMvNormal` components |
 
 `MixtureSpec(structure, k)` defaults to independent components. `Tied` describes
 constraints, not array aliasing. This release implements shared `F,D` only through
-PCAEM; other tied configurations and generic observed-space latent fitting are
-rejected explicitly. PCAEM additionally constrains means to an affine PCA subspace.
+PCAEM and joint covariance EM; other tied configurations are rejected explicitly. PCAEM additionally constrains means to an affine PCA subspace.
 `LatentCovariance(r; latent=DiagonalCovariance())` requests diagonal reduced-space
 covariances; its default is full covariance. No one-to-one mapping between specs
 and distribution types is required (full and diagonal both use `MvNormal`).
@@ -183,5 +183,51 @@ The implementation no longer depends on GaussianMixtures.jl. Random initializati
 and trajectories differ; predictions and supported model families remain available.
 Distribution operations retain the PR1 interfaces described in the Gaussian guides.
 
+## Joint latent covariance EM
+
+`CovarianceEM` also fits `LatentCovariance(r)` as a single Gaussian or as a
+mixture with exactly `Tied(:F, :D)`. Component means and latent covariances remain
+independent; the loading and diagonal residual variances are learned jointly.
+
+```julia
+spec = MixtureSpec(LatentCovariance(3), 4; tied=Tied(:F, :D))
+method = EM(covariance_method=CovarianceEM(maxiter=5), maxiter=50)
+state = initialize(spec, method, X; rng)
+fit!(state, method, X; weights=w)
+fit!(state, method, X; weights=w) # Continues all parameters without initialization.
+posterior = responsibilities(state.model, X)
+
+# A single weighted Gaussian uses the same covariance update.
+g = fit(LatentCovariance(3), CovarianceEM(), X; weights=w, rng)
+
+# Restrict each component's latent A to be diagonal:
+diagonal_latent = MixtureSpec(
+    LatentCovariance(3; latent=DiagonalCovariance()), 4; tied=Tied(:F, :D))
+```
+
+The covariance is `F*A_k*F' + Diagonal(D)`. At each outer M-step, component
+responsibilities and updated means stay fixed during an inner joint EM fit.
+Posterior latent first and second moments produce small sufficient statistics;
+loading updates pool those statistics, each `A_k` updates independently, and the
+residual diagonal pools expected squared residuals. No dense observation scatter
+matrix is formed. Centered observations are processed one component at a time.
+
+`state.inner_reports` contains **one joint covariance report**, whose history is
+the component-mass-weighted covariance log likelihood. It is not a per-component
+report. One inner sweep already constitutes a generalized EM update; `maxiter`
+controls additional covariance optimization. `variance_floor` applies to D, not A.
+Latent covariance factors are fitted with positive-definite A; continuation rejects
+singular A even though `LatentMvNormal` can represent it for other operations.
+
+Unlike PCAEM, this method learns F and D through the observed likelihood and does
+not constrain means to the initial PCA affine subspace. Full latent covariance has
+nonunique coordinates: simultaneous transformations of F and A can preserve the
+observation covariance. No coordinate normalization is imposed; compare covariance
+and likelihood, rather than individual loading entries, across runs.
+
+Fitted components retain independently owned copies of equal F and D arrays,
+consistent with `LatentMvNormal` ownership. `workspace` validates those equalities,
+and joint updates preserve them. This release does not support separate D with
+shared F, separate F with shared D, or other partial-sharing combinations.
 If an inner covariance solver reports `:failed`, outer EM retains the last valid
 mixture and reports the inner failure instead of accepting that candidate.

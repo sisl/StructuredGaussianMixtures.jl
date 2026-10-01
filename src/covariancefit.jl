@@ -76,3 +76,23 @@ function _fit_gaussian!(state::GaussianWorkspace, m::CovarianceMethod, X, w)
     state.report=inner
     return state.model
 end
+
+# Component weights retain their masses: tied updates must pool within-component
+# statistics before normalization, rather than average component covariances.
+function _fit_components(s::MixtureSpec, m::CovarianceMethod, current, X, weights)
+    fitted=Distributions.AbstractMvNormal[]
+    reports=FitReport[]
+    for k in 1:s.k
+        state=GaussianWorkspace(s.covariance, current[k], FitReport())
+        component_weights=copy(view(weights, :, k))
+        component_data, component_weights=if any(iszero, component_weights)
+            _data(X, component_weights)
+        else
+            component_weights ./= sum(component_weights)
+            (X, component_weights)
+        end
+        push!(fitted, _fit_gaussian!(state, m, component_data, component_weights))
+        push!(reports, state.report)
+    end
+    return fitted, reports
+end

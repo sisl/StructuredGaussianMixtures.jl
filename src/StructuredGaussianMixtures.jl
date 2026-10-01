@@ -22,6 +22,7 @@ include("initialization.jl")
 include("em.jl")
 include("fit.jl")
 include("pca.jl")
+include("latentfit.jl")
 export fit, fit!, initialize, workspace, responsibilities
 export FullCovariance,
     DiagonalCovariance, LowRankDiagonal, LatentCovariance, MixtureSpec, Tied

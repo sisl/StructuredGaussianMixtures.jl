@@ -67,7 +67,7 @@ struct Exact <: CovarianceMethod
         return new(regularization)
     end
 end
-"""Inner factor-analysis EM; `variance_floor` constrains residual variances."""
+"""Inner factor-analysis or joint latent covariance EM; `variance_floor` constrains residual variances."""
 struct CovarianceEM{I<:Initialization} <: CovarianceMethod
     maxiter::Int
     tol::Float64

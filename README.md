@@ -30,7 +30,10 @@ state.report
 
 - `FullCovariance()` and `DiagonalCovariance()` use `Exact()` covariance updates.
 - `LowRankDiagonal(r)` uses `CovarianceEM()` without forming a dense covariance.
-- `LatentCovariance(r)` with `Tied(:F,:D)` uses `PCAEM(latent_method=EM(...))`.
+- `LatentCovariance(r)` supports single-Gaussian `CovarianceEM()` fitting.
+- `LatentCovariance(r)` with `Tied(:F,:D)` supports joint
+  `EM(covariance_method=CovarianceEM())`, learning shared loadings and residual noise,
+  or `PCAEM(latent_method=EM(...))` for a fixed PCA projection.
   It retains the PCA loading and component latent covariances in `LatentMvNormal`.
 - All fitting paths accept `weights=...` and fresh fits accept `rng=...`.
 - Native `EM` provides convergence reports, restarts and weighted updates.
