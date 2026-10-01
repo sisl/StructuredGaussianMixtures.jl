@@ -45,7 +45,8 @@ The fit stores only scatter bands, not a dense scatter matrix. Work is
 O(n*p*b + p*b^3) for nonzero bandwidth, with the diagonal case O(n*p).
 The representation stores precision and Cholesky bands in O(p*(b+1)) space.
 Factorization takes O(p*(b+1)^2), and each score, sample, or precision solve takes
-O(p*(b+1)). No optional package is required.
+O(p*(b+1)). `logdetcov`, scalar and batched `sqmahal`/`sqmahal!`, and `logpdf`/`logpdf!`
+use the compact representation. No optional package is required.
 
 ## Conditioning and marginalization
 

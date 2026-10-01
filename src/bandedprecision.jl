@@ -301,3 +301,15 @@ function predict(
 )
     return predict(g, x, collect(input_indices), collect(output_indices))
 end
+
+Distributions.partype(::BandedPrecisionMvNormal) = Float64
+function Distributions.sqmahal!(
+    out::AbstractArray{<:Real}, g::BandedPrecisionMvNormal, X::AbstractMatrix{<:Real}
+)
+    size(X, 1)==length(g) && length(out)==size(X, 2) ||
+        throw(DimensionMismatch("quadratic form dimensions differ"))
+    for j in axes(X, 2)
+        out[j]=sqmahal(g, view(X, :, j))
+    end
+    return out
+end

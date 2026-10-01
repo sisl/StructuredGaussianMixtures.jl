@@ -114,3 +114,15 @@ end
     @test state.report.status==:failed
     @test state.model === initial
 end
+
+@testset "Banded batched quadratic forms" begin
+    g=BandedPrecisionMvNormal([1.0, 2.0], [2.0 0.3; 0.3 1.0]; bandwidth=1)
+    reference=MvNormal(mean(g), Symmetric(cov(g)))
+    X=[1.0 2 3; 2.0 -1 0]
+    @test sqmahal(g, X) ≈ sqmahal(reference, X)
+    buffer=zeros(3)
+    @test sqmahal!(buffer, g, X) === buffer
+    @test buffer ≈ sqmahal(reference, X)
+    @test_throws DimensionMismatch sqmahal!(zeros(2), g, X)
+    @test_throws DimensionMismatch sqmahal!(zeros(3), g, zeros(3, 3))
+end
