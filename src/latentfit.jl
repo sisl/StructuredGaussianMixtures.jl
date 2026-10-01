@@ -124,9 +124,14 @@ function _fit_components(
     mass=vec(sum(component_weights; dims=1))
     all(>(0), mass) || throw(ArgumentError("components must have positive mass"))
     mass ./= sum(mass)
-    weights=[component_weights[:, k]/sum(component_weights[:, k]) for k in 1:s.k]
-    means=[_mean(X, w) for w in weights]
-    residual=k -> X .- means[k]
+    # Zero responsibilities must be omitted before moments and log scores:
+    # multiplying a zero weight by an overflowed residual is not numerically safe.
+    kept=[findall(>(0), view(component_weights, :, k)) for k in 1:s.k]
+    weights=[
+        component_weights[kept[k], k]/sum(component_weights[kept[k], k]) for k in 1:s.k
+    ]
+    means=[_mean(view(X, :, kept[k]), weights[k]) for k in 1:s.k]
+    residual=k -> view(X, :, kept[k]) .- means[k]
     gs, report=_joint_latent_covariance(s.covariance, m, current, residual, weights, mass)
     return [_remean(gs[k], means[k]) for k in 1:s.k], [report]
 end

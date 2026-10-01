@@ -122,4 +122,17 @@ const SGMlatent = StructuredGaussianMixtures
     Cr, Hr=SGMlatent._latent_moments(rotated, X, w)
     @test Cr ≈ C
     @test Hr ≈ H
+    # Underflowed responsibilities exclude extreme observations before centering
+    # and scoring the inner objective, rather than evaluating 0*Inf.
+    far=fill(1e160, 2)
+    extremes=hcat(zeros(2), far, zeros(2), far)
+    separated=MixtureModel([
+        LatentMvNormal(μ, zeros(2, 1), ones(2), ones(1, 1)) for μ in (zeros(2), far)
+    ])
+    separated_spec=MixtureSpec(LatentCovariance(1), 2; tied=Tied(:F, :D))
+    separated_method=EM(covariance_method=CovarianceEM(maxiter=1), maxiter=1)
+    separated_state=workspace(separated_spec, separated_method, separated)
+    fit!(separated_state, separated_method, extremes)
+    @test separated_state.report.status==:iteration_limit
+    @test isfinite(separated_state.report.objective)
 end
