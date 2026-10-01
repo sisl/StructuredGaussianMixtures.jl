@@ -10,6 +10,7 @@ Data matrices are **features × observations**. `fit` returns a fitted distribut
 |---|---|---|
 | `FullCovariance()` | `Exact()` alone, or `EM(covariance_method=Exact())` | `MvNormal` |
 | `DiagonalCovariance()` | `Exact()` alone, or `EM(covariance_method=Exact())` | diagonal `MvNormal` |
+| `ToeplitzCovariance()` | `ToeplitzMLE()` alone, or inside `EM` | `ToeplitzMvNormal` |
 | `LowRankDiagonal(r)` | `CovarianceEM()` alone, or `EM(covariance_method=CovarianceEM())` | `LRDMvNormal` |
 | `LatentCovariance(r)` in `MixtureSpec(...; tied=Tied(:F,:D))` | `PCAEM()` | `LatentMvNormal` components |
 
@@ -182,6 +183,74 @@ staging are not retained. Use explicit continuation for staged budgets.
 The implementation no longer depends on GaussianMixtures.jl. Random initialization
 and trajectories differ; predictions and supported model families remain available.
 Distribution operations retain the PR1 interfaces described in the Gaussian guides.
+
+## Toeplitz covariance
+
+`ToeplitzCovariance()` constrains covariance entries to depend only on coordinate
+separation: `Σ[i,j] = c[abs(i-j)+1]`. Coordinates must therefore have a meaningful
+stationary ordering. Component means are unrestricted; mixture components have
+independent Toeplitz covariances. Tied Toeplitz fitting is not yet supported.
+
+```@example fitting
+stationary_method = ToeplitzMLE(regularization=1e-5, maxiter=300, tol=1e-6)
+stationary = fit(ToeplitzCovariance(), stationary_method, X; weights=w, report=true)
+stationary.report.status
+stationary_spec = MixtureSpec(ToeplitzCovariance(), 2)
+stationary_em = EM(covariance_method=stationary_method, maxiter=3)
+stationary_state = initialize(stationary_spec, stationary_em, X; rng)
+stationary_gmm = fit!(stationary_state, stationary_em, X)
+stationary_state.inner_reports
+```
+
+The covariance solver minimizes `logdet(T) + tr(T⁻¹(S + regularization*I))` over
+positive definite symmetric Toeplitz matrices, where `S` is weighted centered
+scatter. This is the Gaussian covariance likelihood when regularization is zero;
+otherwise it includes a precision-trace penalty. It **does not** label diagonal
+averaging as an MLE. Fresh initialization is isotropic; continuation starts at
+the supplied covariance. Gradient steps on lag coefficients use backtracking to
+maintain positive definiteness and Armijo descent. The objective is nonconvex;
+there is no global-optimum guarantee. `:converged` requires the infinity norm of
+the lag gradient to meet `tol`, after scaling the scatter to average variance
+one. `:iteration_limit` and exhausted-line-search `:failed` are separate outcomes.
+`maxiter=0` evaluates the initialized state. No variance floor is silently applied.
+Positive regularization is recommended for degenerate data.
+
+The inner report uses `:penalized_covariance_loglikelihood` for positive
+regularization and stores ordinary weighted likelihood in `observed_objective`.
+Its history increases along accepted covariance steps. Outer mixture reports
+continue to describe observed likelihood; penalized inner updates do not imply
+monotonic observed likelihood. Inspect inner statuses as well as the outer report.
+An exhausted inner line search marks outer fitting as failed and preserves the
+previous mixture; an inner iteration limit may still provide a valid improving update.
+
+`ToeplitzMvNormal(mean, first_column)` copies parameters and prepares an innovations
+transform using Durbin recursion in O(p²) time and storage. Cached log determinants
+cost O(1); scoring and sampling cost O(p²) per observation.
+`Distributions.sqmahal(g, X)` and `sqmahal!(out, g, X)` expose batched squared
+Mahalanobis distances using the same cached innovations transform. This implementation
+caches all predictor coefficients rather than promising O(p) total storage.
+Near-singular covariances may lose numerical accuracy in this recurrence; invalid
+innovation variances are rejected. See the [SciPy Toeplitz solver notes](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.solve_toeplitz.html)
+for the numerical tradeoff of Levinson–Durbin methods.
+
+Fitting is currently a **dense reference implementation**: scatter and gradient
+storage are O(p²), and each objective/gradient evaluation uses O(p³) work.
+Backtracking can require multiple evaluations. This is intended for moderate
+feature dimensions, not a scalable structured optimizer. There are no optional
+or mandatory new dependencies. More sophisticated solvers can later implement
+the same covariance fitting interface, using extensions when dependencies are needed.
+
+`cov` explicitly materializes the dense covariance, and `invcov` materializes its dense inverse. Arbitrary marginals and conditional
+`predict` return dense `MvNormal` distributions because Toeplitz structure need not
+survive selection or conditioning. Conditioning constructs only the selected observed/target covariance blocks from
+lag entries, without materializing the full covariance. It uses a dense solve in
+the observed dimension; no Toeplitz closure is assumed for arbitrary selections.
+
+```@docs
+ToeplitzCovariance
+ToeplitzMLE
+ToeplitzMvNormal
+```
 
 If an inner covariance solver reports `:failed`, outer EM retains the last valid
 mixture and reports the inner failure instead of accepting that candidate.
