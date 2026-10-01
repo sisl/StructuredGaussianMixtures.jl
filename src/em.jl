@@ -19,11 +19,21 @@ function fit!(state::MixtureWorkspace, m::EM, X::AbstractMatrix; weights=nothing
         throw(DimensionMismatch("workspace dimension mismatch"))
     report=FitReport()
     state.report=report
-    joints=_logjoints(state.model, X)
-    normalizers=_lognormalizers(joints)
-    previous=dot(vec(normalizers), w)
-    push!(report.history, previous)
     empty!(state.inner_reports)
+    joints, normalizers, previous=try
+        scores=_logjoints(state.model, X)
+        norms=_lognormalizers(scores)
+        value=dot(vec(norms), w)
+        isfinite(value) || throw(ArgumentError("nonfinite objective"))
+        (scores, norms, value)
+    catch err
+        err isa Union{PosDefException,SingularException,ArgumentError,DomainError} ||
+            rethrow()
+        report.status=:failed
+        report.message=sprint(showerror, err)
+        return state.model
+    end
+    push!(report.history, previous)
     for iteration in 1:m.maxiter
         resp=exp.(joints .- normalizers)
         mass=vec(resp'*w)
@@ -37,6 +47,13 @@ function fit!(state::MixtureWorkspace, m::EM, X::AbstractMatrix; weights=nothing
         try
             newcomponents, inner_reports=_fit_components(
                 state.spec, m.covariance_method, components(state.model), X, resp .* w
+            )
+            any(r -> r.status==:failed, inner_reports) && throw(
+                ArgumentError(
+                    "covariance fitting failed: "*join(
+                        [r.message for r in inner_reports if r.status==:failed], "; "
+                    ),
+                ),
             )
             typed_components=Vector{typeof(first(newcomponents))}(newcomponents)
             candidate=MixtureModel(typed_components, mass ./ sum(mass))

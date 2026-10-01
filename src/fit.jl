@@ -58,6 +58,10 @@ PCAWorkspace because an observed distribution does not uniquely identify its off
 function workspace(
     s::GaussianStructure, m::CovarianceMethod, g::Distributions.AbstractMvNormal
 )
+    _validate_model(s, m, g)
+    return GaussianWorkspace(s, deepcopy(g), FitReport())
+end
+function _validate_model(s::GaussianStructure, m::CovarianceMethod, g)
     _check(s, m, length(g))
     valid=if s isa FullCovariance
         g isa MvNormal
@@ -69,13 +73,13 @@ function workspace(
         g isa LRDMvNormal && rank(g)==s.r
     end
     valid || throw(ArgumentError("model does not match structure"))
-    return GaussianWorkspace(s, deepcopy(g), FitReport())
+    return nothing
 end
 function workspace(s::MixtureSpec, m::EM, g::MixtureModel)
     _check(s, m, length(first(components(g))))
     length(components(g))==s.k || throw(DimensionMismatch("component count mismatch"))
     for c in components(g)
-        workspace(s.covariance, m.covariance_method, c)
+        _validate_model(s.covariance, m.covariance_method, c)
     end
     if s.tied.parameters==(:covariance,)
         reference=cov(first(components(g)))

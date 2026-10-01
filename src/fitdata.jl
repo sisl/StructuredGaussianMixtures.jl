@@ -10,13 +10,25 @@ function _data(X::AbstractMatrix, weights)
     # Scaling first avoids overflow for large finite weights. Remove zero mass
     # observations before initialization and PCA as well as moment calculations.
     w ./= maximum(w)
-    keep=findall(>(0), w)
-    w=w[keep]
+    if any(iszero, w)
+        keep=findall(>(0), w)
+        X=X[:, keep]
+        w=w[keep]
+    end
     w ./= sum(w)
-    return Matrix{Float64}(X[:, keep]), w
+    # Fitting only reads data; reuse an existing dense Float64 matrix.
+    return X isa Matrix{Float64} ? X : Matrix{Float64}(X), w
 end
 _mean(X, w) = vec(X*w)
-_variance(R, w) = vec(abs2.(R)*w)
+function _variance(R, w)
+    v=zeros(size(R, 1))
+    for j in axes(R, 2)
+        @inbounds for i in axes(R, 1)
+            v[i] += abs2(R[i, j])*w[j]
+        end
+    end
+    return v
+end
 function _scores(g, X)
     scores=Vector{Float64}(undef, size(X, 2))
     logpdf!(scores, g, X)

@@ -64,6 +64,12 @@ function fit!(
     _check(state.spec, m, size(X, 1))
     length(state.model)==size(X, 1) ||
         throw(DimensionMismatch("workspace dimension mismatch"))
+    return _fit_gaussian!(state, m, X, w)
+end
+
+# Internal entrypoint for validated data and normalized weights, including the
+# mixture M-step. Avoid copying and rescanning the data once per component.
+function _fit_gaussian!(state::GaussianWorkspace, m::CovarianceMethod, X, w)
     μ=_mean(X, w)
     g, inner=_covariance(state.spec, m, state.model, X .- μ, w)
     state.model=_remean(g, μ)
@@ -85,7 +91,14 @@ function _fit_components(s::MixtureSpec, m::CovarianceMethod, current, X, weight
     reports=FitReport[]
     for k in 1:s.k
         state=GaussianWorkspace(s.covariance, current[k], FitReport())
-        push!(fitted, fit!(state, m, X; weights=view(weights, :, k)))
+        component_weights=copy(view(weights, :, k))
+        component_data, component_weights=if any(iszero, component_weights)
+            _data(X, component_weights)
+        else
+            component_weights ./= sum(component_weights)
+            (X, component_weights)
+        end
+        push!(fitted, _fit_gaussian!(state, m, component_data, component_weights))
         push!(reports, state.report)
     end
     return fitted, reports

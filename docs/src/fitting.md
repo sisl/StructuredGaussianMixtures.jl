@@ -153,6 +153,9 @@ An outer iteration commits parameters only after all component updates succeed.
 A component with mass at or below `min_mass` fails the run explicitly; it is not
 silently reinitialized. Numerical covariance failures are also reported. `fit!`
 returns the last valid model with a failed report; callers must inspect that report.
+An initial numerical scoring failure also produces `:failed`: the model is
+unchanged, the history is empty, and the objective remains `-Inf`. An M-step
+failure retains the last successfully evaluated model and objective.
 Fresh `fit` excludes failed restarts, selects the largest final objective among
 successful runs, and throws if all fail. Reports retain each restart's diagnostics.
 Invalid configuration/data raise errors rather than being treated as failed restarts.
@@ -216,3 +219,5 @@ matrix contains effective observation weights; column sums retain component
 masses. Independent fitting delegates to single-Gaussian fitting, while tied
 methods combine statistics before normalizing. It returns components and inner
 reports, leaving responsibilities and outer convergence to the EM driver.
+If an inner covariance solver reports `:failed`, outer EM retains the last valid
+mixture and reports the inner failure instead of accepting that candidate.
