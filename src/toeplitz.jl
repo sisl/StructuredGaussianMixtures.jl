@@ -118,6 +118,7 @@ function predict(
     input::Union{Vector{Int},AbstractRange},
     output::Union{Vector{Int},AbstractRange},
 )
+    all(isfinite, x) || throw(ArgumentError("observed values must be finite"))
     obs=_structured_indices(g, input)
     target=_structured_indices(g, output)
     length(x)==length(obs) ||

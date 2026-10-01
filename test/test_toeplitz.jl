@@ -40,6 +40,7 @@ using Test, Random, Distributions, LinearAlgebra, Statistics
     @test predict(g, Float64[], Int[], [1, 3]) isa MvNormal
     @test predict(g, [0.1]) isa MvNormal
     @test_throws ArgumentError predict(g, [0.1], [1], [1, 2])
+    @test_throws ArgumentError predict(g, [NaN], [1], [2])
     @test_throws ArgumentError marginal(g, [1, 1])
     @test_throws ArgumentError marginal(g, Int[])
     @test_throws DimensionMismatch ToeplitzMvNormal(zeros(2), [1.0])

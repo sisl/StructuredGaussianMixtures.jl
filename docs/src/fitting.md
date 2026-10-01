@@ -217,6 +217,8 @@ regularization and stores ordinary weighted likelihood in `observed_objective`.
 Its history increases along accepted covariance steps. Outer mixture reports
 continue to describe observed likelihood; penalized inner updates do not imply
 monotonic observed likelihood. Inspect inner statuses as well as the outer report.
+An exhausted inner line search marks outer fitting as failed and preserves the
+previous mixture; an inner iteration limit may still provide a valid improving update.
 
 `ToeplitzMvNormal(mean, first_column)` copies parameters and prepares an innovations
 transform using Durbin recursion in O(p²) time and storage. Cached log determinants
