@@ -5,6 +5,7 @@ module StructuredGaussianMixtures
 using Distributions
 import Distributions: fit
 using LinearAlgebra
+using SparseArrays
 using Statistics
 using Random
 using Arpack: eigs
@@ -15,6 +16,9 @@ export LRDMvNormal, rank, low_rank_factor, diagonal
 include("latentmvnormal.jl")
 export LatentMvNormal, loading, latent_covariance_factor, latent_covariance
 
+include("sparseprecision.jl")
+export SparsePrecisionMvNormal
+
 include("fitspecs.jl")
 include("fitdata.jl")
 include("covariancefit.jl")
@@ -22,6 +26,8 @@ include("initialization.jl")
 include("em.jl")
 include("fit.jl")
 include("pca.jl")
+include("sparsefit.jl")
+export SparsePrecision, GraphicalLasso
 export fit, fit!, initialize, workspace, responsibilities
 export FullCovariance,
     DiagonalCovariance, LowRankDiagonal, LatentCovariance, MixtureSpec, Tied
