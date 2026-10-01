@@ -100,16 +100,22 @@ function predict(
     isempty(intersect(obs, target)) ||
         throw(ArgumentError("input and output indices must be disjoint"))
     isempty(obs) && return marginal(g, target)
-    remaining=vcat(target, setdiff(1:length(g), vcat(obs, target)))
-    Q=g.Q[remaining, remaining]
-    factor=cholesky(Symmetric(Q))
-    μ=g.μ[remaining]-factor \ (g.Q[remaining, obs]*(x-g.μ[obs]))
-    conditional=SparsePrecisionMvNormal(μ, Q)
-    return if length(remaining)==length(target)
-        conditional
-    else
-        marginal(conditional, 1:length(target))
+    if length(obs)+length(target)==length(g)
+        conditional=SparsePrecisionMvNormal(g.μ[target], g.Q[target, target])
+        # Only the owned mean changes; the cached factor depends solely on Q.
+        conditional.μ .-= conditional.factor \ (g.Q[target, obs]*(x-g.μ[obs]))
+        return conditional
     end
+    # Marginalize omitted coordinates by selected solves against the existing
+    # factor, then form the Schur complement only in the small selected block.
+    block=_selected_sparse_covariance(g, vcat(obs, target))
+    i=1:length(obs)
+    t=(length(obs) + 1):size(block, 1)
+    factor=cholesky(Symmetric(block[i, i]))
+    cross=block[t, i]
+    μ=g.μ[target]+cross*(factor \ (x-g.μ[obs]))
+    covariance=Symmetric(block[t, t]-cross*(factor \ block[i, t]))
+    return MvNormal(μ, covariance)
 end
 function predict(
     g::SparsePrecisionMvNormal,
