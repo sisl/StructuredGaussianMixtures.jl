@@ -13,6 +13,13 @@ using StructuredGaussianMixtures
     @test var(g) ≈ var(dense)
     @test Distributions.logdetcov(g) ≈ logdet(cov(dense))
     @test Distributions.sqmahal(g, X[:, 1]) ≈ Distributions.sqmahal(dense, X[:, 1])
+    @test Distributions.partype(g)==Float64
+    @test Distributions.sqmahal(g, X) ≈ Distributions.sqmahal(dense, X)
+    quadratic=zeros(size(X, 2))
+    @test Distributions.sqmahal!(quadratic, g, X) === quadratic
+    @test quadratic ≈ Distributions.sqmahal(dense, X)
+    @test_throws DimensionMismatch Distributions.sqmahal(g, zeros(p-1, 3))
+    @test_throws DimensionMismatch Distributions.sqmahal!(zeros(10), g, X)
     @test logpdf(g, X) ≈ logpdf(dense, X)
     buffer=zeros(11)
     logpdf!(buffer, g, X)

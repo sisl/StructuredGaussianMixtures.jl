@@ -23,6 +23,7 @@ struct SparsePrecisionMvNormal <: Distributions.AbstractMvNormal
         return new(μc, Qc, cholesky(Symmetric(Qc)))
     end
 end
+Distributions.partype(::SparsePrecisionMvNormal) = Float64
 Distributions.length(g::SparsePrecisionMvNormal) = length(g.μ)
 Distributions.size(g::SparsePrecisionMvNormal) = (length(g),)
 Distributions.mean(g::SparsePrecisionMvNormal) = copy(g.μ)
@@ -41,19 +42,26 @@ end
 function Distributions.logpdf(g::SparsePrecisionMvNormal, x::AbstractVector)
     return -0.5*(length(g)*log(2π)+Distributions.logdetcov(g)+Distributions.sqmahal(g, x))
 end
-function Distributions._logpdf!(
+function Distributions.sqmahal!(
     out::AbstractArray{<:Real}, g::SparsePrecisionMvNormal, X::AbstractMatrix{<:Real}
 )
     size(X, 1)==length(g) && length(out)==size(X, 2) ||
         throw(DimensionMismatch("score dimensions mismatch"))
     y=Vector{Float64}(undef, length(g))
     q=similar(y)
-    constant=length(g)*log(2π)+Distributions.logdetcov(g)
     for j in axes(X, 2)
         y .= view(X, :, j) .- g.μ
         mul!(q, g.Q, y)
-        out[j]=-0.5*(constant+dot(y, q))
+        out[j]=dot(y, q)
     end
+    return out
+end
+function Distributions._logpdf!(
+    out::AbstractArray{<:Real}, g::SparsePrecisionMvNormal, X::AbstractMatrix{<:Real}
+)
+    Distributions.sqmahal!(out, g, X)
+    constant=length(g)*log(2π)+Distributions.logdetcov(g)
+    out .= -0.5 .* (constant .+ out)
     return out
 end
 function Distributions.logpdf(g::SparsePrecisionMvNormal, X::AbstractMatrix)

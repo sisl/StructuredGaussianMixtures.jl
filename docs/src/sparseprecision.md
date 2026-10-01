@@ -4,7 +4,8 @@
 Cholesky factor. It needs only Julia's `SparseArrays` standard library beyond the
 base package dependencies. `Distributions.invcov(g)` returns a copy; `cov(g)` explicitly
 materializes a dense covariance. Scoring uses sparse matrix products and a cached
-log determinant. Sampling uses the permuted sparse triangular factor.
+log determinant. `Distributions.sqmahal(g, X)` and `sqmahal!(out, g, X)` expose
+the same batched quadratic-form kernel without computing log densities. Sampling uses the permuted sparse triangular factor.
 
 ```@example sparse
 using StructuredGaussianMixtures, SparseArrays, Distributions, Random
