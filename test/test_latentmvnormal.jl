@@ -118,7 +118,13 @@ using StructuredGaussianMixtures
 
     @testset "PCAEM decomposition and ownership" begin
         X = randn(rng, 9, 150)
-        P, μ = StructuredGaussianMixtures._truncated_pca(X, 3)
+        initial = initialize(
+            MixtureSpec(LatentCovariance(3), 2; tied=Tied(:F, :D)),
+            PCAEM(),
+            X;
+            rng=MersenneTwister(98),
+        )
+        P, μ = initial.F, initial.offset
         D = vec(var(X - (P * (P' * (X .- μ)) .+ μ); dims=2, corrected=false))
         # Re-run the reduced-space fit with the same seed to verify the mapping.
         Random.seed!(97)
