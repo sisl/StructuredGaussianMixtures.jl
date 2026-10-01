@@ -64,6 +64,12 @@ function fit!(
     _check(state.spec, m, size(X, 1))
     length(state.model)==size(X, 1) ||
         throw(DimensionMismatch("workspace dimension mismatch"))
+    return _fit_gaussian!(state, m, X, w)
+end
+
+# Internal entrypoint for validated data and normalized weights, including the
+# mixture M-step. Avoid copying and rescanning the data once per component.
+function _fit_gaussian!(state::GaussianWorkspace, m::CovarianceMethod, X, w)
     μ=_mean(X, w)
     g, inner=_covariance(state.spec, m, state.model, X .- μ, w)
     state.model=_remean(g, μ)

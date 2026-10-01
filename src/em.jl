@@ -19,11 +19,21 @@ function fit!(state::MixtureWorkspace, m::EM, X::AbstractMatrix; weights=nothing
         throw(DimensionMismatch("workspace dimension mismatch"))
     report=FitReport()
     state.report=report
-    joints=_logjoints(state.model, X)
-    normalizers=_lognormalizers(joints)
-    previous=dot(vec(normalizers), w)
-    push!(report.history, previous)
     empty!(state.inner_reports)
+    joints, normalizers, previous=try
+        scores=_logjoints(state.model, X)
+        norms=_lognormalizers(scores)
+        value=dot(vec(norms), w)
+        isfinite(value) || throw(ArgumentError("nonfinite objective"))
+        (scores, norms, value)
+    catch err
+        err isa Union{PosDefException,SingularException,ArgumentError,DomainError} ||
+            rethrow()
+        report.status=:failed
+        report.message=sprint(showerror, err)
+        return state.model
+    end
+    push!(report.history, previous)
     for iteration in 1:m.maxiter
         resp=exp.(joints .- normalizers)
         mass=vec(resp'*w)
@@ -39,9 +49,20 @@ function fit!(state::MixtureWorkspace, m::EM, X::AbstractMatrix; weights=nothing
                 localstate=GaussianWorkspace(
                     state.spec.covariance, components(state.model)[j], FitReport()
                 )
+                component_weights=w .* view(resp, :, j)
+                # Underflowed responsibilities have zero mass; exclude those
+                # observations before moments (so 0 * overflow cannot become NaN).
+                component_data, component_weights=if any(iszero, component_weights)
+                    _data(X, component_weights)
+                else
+                    component_weights ./= sum(component_weights)
+                    (X, component_weights)
+                end
                 push!(
                     newcomponents,
-                    fit!(localstate, m.covariance_method, X; weights=w .* resp[:, j]),
+                    _fit_gaussian!(
+                        localstate, m.covariance_method, component_data, component_weights
+                    ),
                 )
                 push!(inner_reports, localstate.report)
             end
