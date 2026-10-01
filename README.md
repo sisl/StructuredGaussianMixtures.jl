@@ -40,3 +40,10 @@ state.report
 Install with `Pkg.add("StructuredGaussianMixtures")`. See the
 [fitting guide](docs/src/fitting.md) for the API, supported combinations,
 initialization and migration from the former EM/FactorEM/PCAEM interface.
+
+Banded precision models use `fit(BandedPrecision(2), Exact(), X)` or
+`fit(MixtureSpec(BandedPrecision(2), 3), EM(), X)`. Precision bandwidth follows
+the feature order. Scoring uses compact bands, and conditioning preserves them
+when all omitted variables are observed. See the
+[banded precision guide](docs/src/bandedprecision.md) for regularization semantics
+and dense marginalization fallbacks.

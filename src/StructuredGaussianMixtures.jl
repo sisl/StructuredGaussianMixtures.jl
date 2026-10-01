@@ -29,6 +29,8 @@ export Exact, CovarianceEM, EM, PCAEM, KMeansInit, RandomInit, RandomLoading
 export FitReport, GaussianWorkspace, MixtureWorkspace, PCAWorkspace
 
 include("predict.jl")
+include("bandedprecision.jl")
+export BandedPrecision, BandedPrecisionMvNormal
 export predict, marginal
 
 end # module
