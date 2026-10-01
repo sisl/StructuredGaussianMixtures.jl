@@ -58,6 +58,9 @@ function initialize(
     _check(s, m, size(X, 1))
     centers=_centers(m.init, s.k, X, w, rng)
     base = initialize(s.covariance, m.covariance_method, X; weights=w, rng).model
-    comps = [_remean(deepcopy(base), centers[:, j]) for j in 1:s.k]
+    comps = [
+        _remean(s.tied.parameters==(:covariance,) ? base : deepcopy(base), centers[:, j])
+        for j in 1:s.k
+    ]
     return MixtureWorkspace(s, MixtureModel(comps), FitReport(), FitReport[])
 end

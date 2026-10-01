@@ -45,27 +45,9 @@ function fit!(state::MixtureWorkspace, m::EM, X::AbstractMatrix; weights=nothing
         newcomponents=Distributions.AbstractMvNormal[]
         inner_reports=FitReport[]
         try
-            for j in 1:state.spec.k
-                localstate=GaussianWorkspace(
-                    state.spec.covariance, components(state.model)[j], FitReport()
-                )
-                component_weights=w .* view(resp, :, j)
-                # Underflowed responsibilities have zero mass; exclude those
-                # observations before moments (so 0 * overflow cannot become NaN).
-                component_data, component_weights=if any(iszero, component_weights)
-                    _data(X, component_weights)
-                else
-                    component_weights ./= sum(component_weights)
-                    (X, component_weights)
-                end
-                push!(
-                    newcomponents,
-                    _fit_gaussian!(
-                        localstate, m.covariance_method, component_data, component_weights
-                    ),
-                )
-                push!(inner_reports, localstate.report)
-            end
+            newcomponents, inner_reports=_fit_components(
+                state.spec, m.covariance_method, components(state.model), X, resp .* w
+            )
             any(r -> r.status==:failed, inner_reports) && throw(
                 ArgumentError(
                     "covariance fitting failed: "*join(
