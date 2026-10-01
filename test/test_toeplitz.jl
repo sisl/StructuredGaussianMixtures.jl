@@ -13,6 +13,12 @@ using Test, Random, Distributions, LinearAlgebra, Statistics
         @test var(g)==var(dense)
         @test Distributions.logdetcov(g) ≈ logdet(cov(dense)) atol=1e-10
         @test logpdf(g, X) ≈ logpdf(dense, X)
+        @test Distributions.sqmahal(g, X) ≈ Distributions.sqmahal(dense, X)
+        quadratics=zeros(size(X, 2))
+        @test Distributions.sqmahal!(quadratics, g, X) === quadratics
+        @test quadratics ≈ Distributions.sqmahal(dense, X)
+        @test_throws DimensionMismatch Distributions.sqmahal!(zeros(5), g, X)
+        @test_throws DimensionMismatch Distributions.sqmahal!(zeros(6), g, zeros(p+1,6))
         @test logpdf(g, X[:, 1]) ≈ logpdf(dense, X[:, 1])
         out=zeros(6)
         logpdf!(out, g, X)

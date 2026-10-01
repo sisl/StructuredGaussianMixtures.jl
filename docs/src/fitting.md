@@ -225,7 +225,9 @@ previous mixture; an inner iteration limit may still provide a valid improving u
 
 `ToeplitzMvNormal(mean, first_column)` copies parameters and prepares an innovations
 transform using Durbin recursion in O(p²) time and storage. Cached log determinants
-cost O(1); scoring and sampling cost O(p²) per observation. This implementation
+cost O(1); scoring and sampling cost O(p²) per observation.
+`Distributions.sqmahal(g, X)` and `sqmahal!(out, g, X)` expose batched squared
+Mahalanobis distances using the same cached innovations transform. This implementation
 caches all predictor coefficients rather than promising O(p) total storage.
 Near-singular covariances may lose numerical accuracy in this recurrence; invalid
 innovation variances are rejected. See the [SciPy Toeplitz solver notes](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.solve_toeplitz.html)

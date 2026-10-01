@@ -72,6 +72,7 @@ struct ToeplitzMvNormal <: Distributions.AbstractMvNormal
         return new(ownedmean, owned, W, ld)
     end
 end
+Distributions.partype(::ToeplitzMvNormal) = Float64
 Distributions.length(g::ToeplitzMvNormal) = length(g.μ)
 Distributions.size(g::ToeplitzMvNormal) = (length(g),)
 Distributions.mean(g::ToeplitzMvNormal) = copy(g.μ)
@@ -83,6 +84,12 @@ Distributions.invcov(g::ToeplitzMvNormal) = Matrix(Symmetric(g.W' * g.W))
 function Distributions.sqmahal(g::ToeplitzMvNormal, x::AbstractVector)
     length(x)==length(g) || throw(DimensionMismatch("observation dimension mismatch"))
     return sum(abs2, g.W*(x-g.μ))
+end
+function Distributions.sqmahal!(out::AbstractVector, g::ToeplitzMvNormal, X::AbstractMatrix)
+    size(X, 1)==length(g) || throw(DimensionMismatch("observation dimension mismatch"))
+    length(out)==size(X, 2) || throw(DimensionMismatch("output length mismatch"))
+    out .= vec(sum(abs2, g.W*(X .- g.μ); dims=1))
+    return out
 end
 function Distributions.logpdf(g::ToeplitzMvNormal, x::AbstractVector)
     return -0.5*(length(g)*log(2π)+g.logdeterminant+Distributions.sqmahal(g, x))
