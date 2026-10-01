@@ -28,6 +28,9 @@ export FullCovariance,
 export Exact, CovarianceEM, EM, PCAEM, KMeansInit, RandomInit, RandomLoading
 export FitReport, GaussianWorkspace, MixtureWorkspace, PCAWorkspace
 
+include("toeplitz.jl")
+export ToeplitzCovariance, ToeplitzMLE, ToeplitzMvNormal
+
 include("predict.jl")
 export predict, marginal
 
