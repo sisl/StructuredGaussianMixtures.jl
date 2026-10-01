@@ -149,6 +149,9 @@ An outer iteration commits parameters only after all component updates succeed.
 A component with mass at or below `min_mass` fails the run explicitly; it is not
 silently reinitialized. Numerical covariance failures are also reported. `fit!`
 returns the last valid model with a failed report; callers must inspect that report.
+An initial numerical scoring failure also produces `:failed`: the model is
+unchanged, the history is empty, and the objective remains `-Inf`. An M-step
+failure retains the last successfully evaluated model and objective.
 Fresh `fit` excludes failed restarts, selects the largest final objective among
 successful runs, and throws if all fail. Reports retain each restart's diagnostics.
 Invalid configuration/data raise errors rather than being treated as failed restarts.
@@ -179,3 +182,6 @@ staging are not retained. Use explicit continuation for staged budgets.
 The implementation no longer depends on GaussianMixtures.jl. Random initialization
 and trajectories differ; predictions and supported model families remain available.
 Distribution operations retain the PR1 interfaces described in the Gaussian guides.
+
+If an inner covariance solver reports `:failed`, outer EM retains the last valid
+mixture and reports the inner failure instead of accepting that candidate.
