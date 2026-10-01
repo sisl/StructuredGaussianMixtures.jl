@@ -78,6 +78,8 @@ Distributions.mean(g::ToeplitzMvNormal) = copy(g.μ)
 Distributions.var(g::ToeplitzMvNormal) = fill(g.c[1], length(g))
 Distributions.cov(g::ToeplitzMvNormal) = _toeplitz_matrix(g.c)
 Distributions.logdetcov(g::ToeplitzMvNormal) = g.logdeterminant
+# Explicit precision requests materialize the dense inverse covariance.
+Distributions.invcov(g::ToeplitzMvNormal) = Matrix(Symmetric(g.W' * g.W))
 function Distributions.sqmahal(g::ToeplitzMvNormal, x::AbstractVector)
     length(x)==length(g) || throw(DimensionMismatch("observation dimension mismatch"))
     return sum(abs2, g.W*(x-g.μ))

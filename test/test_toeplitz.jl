@@ -8,6 +8,7 @@ using Test, Random, Distributions, LinearAlgebra, Statistics
         dense=MvNormal(μ, Symmetric([c[abs(i - j) + 1] for i in 1:p, j in 1:p]))
         X=randn(rng, p, 6)
         @test cov(g) ≈ cov(dense)
+        @test Distributions.invcov(g) ≈ inv(cov(dense))
         @test mean(g)==μ
         @test var(g)==var(dense)
         @test Distributions.logdetcov(g) ≈ logdet(cov(dense)) atol=1e-10

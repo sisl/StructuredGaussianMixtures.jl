@@ -235,7 +235,7 @@ feature dimensions, not a scalable structured optimizer. There are no optional
 or mandatory new dependencies. More sophisticated solvers can later implement
 the same covariance fitting interface, using extensions when dependencies are needed.
 
-`cov` explicitly materializes the dense matrix. Arbitrary marginals and conditional
+`cov` explicitly materializes the dense covariance, and `invcov` materializes its dense inverse. Arbitrary marginals and conditional
 `predict` return dense `MvNormal` distributions because Toeplitz structure need not
 survive selection or conditioning. Conditioning constructs only the selected observed/target covariance blocks from
 lag entries, without materializing the full covariance. It uses a dense solve in
