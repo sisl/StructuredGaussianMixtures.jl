@@ -61,6 +61,8 @@ function workspace(
     _check(s, m, length(g))
     valid=if s isa FullCovariance
         g isa MvNormal
+    elseif s isa IsotropicCovariance
+        g isa MvNormal && isdiag(cov(g)) && all(==(first(var(g))), var(g))
     elseif s isa DiagonalCovariance
         g isa MvNormal && isdiag(cov(g))
     else
@@ -74,6 +76,11 @@ function workspace(s::MixtureSpec, m::EM, g::MixtureModel)
     length(components(g))==s.k || throw(DimensionMismatch("component count mismatch"))
     for c in components(g)
         workspace(s.covariance, m.covariance_method, c)
+    end
+    if s.tied.parameters==(:covariance,)
+        reference=cov(first(components(g)))
+        all(c -> cov(c)==reference, components(g)) ||
+            throw(ArgumentError("component covariances do not satisfy Tied(:covariance)"))
     end
     return MixtureWorkspace(s, deepcopy(g), FitReport(), FitReport[])
 end

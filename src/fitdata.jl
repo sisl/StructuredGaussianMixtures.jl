@@ -24,8 +24,9 @@ function _scores(g, X)
 end
 _objective(g, X, w) = dot(_scores(g, X), w)
 function _check(s::GaussianStructure, m::CovarianceMethod, p)
-    if s isa Union{FullCovariance,DiagonalCovariance}
-        m isa Exact || throw(ArgumentError("full and diagonal covariance require Exact"))
+    if s isa Union{FullCovariance,DiagonalCovariance,IsotropicCovariance}
+        m isa Exact ||
+            throw(ArgumentError("full, diagonal, and isotropic covariance require Exact"))
     elseif s isa LowRankDiagonal
         s.r < p ||
             throw(ArgumentError("LRD rank must be smaller than observation dimension"))
@@ -52,3 +53,14 @@ function _check(s::MixtureSpec, m::PCAEM, p)
 end
 _remean(g::MvNormal, μ) = MvNormal(μ, g.Σ)
 _remean(g::LRDMvNormal, μ) = LRDMvNormal(μ, g.F, g.D)
+
+function _check(
+    s::MixtureSpec{S}, m::EM, p
+) where {S<:Union{FullCovariance,DiagonalCovariance,IsotropicCovariance}}
+    s.tied.parameters in ((), (:covariance,)) || throw(
+        ArgumentError(
+            "exact covariance fitting supports only Tied(:covariance) or no tying"
+        ),
+    )
+    return _check(s.covariance, m.covariance_method, p)
+end

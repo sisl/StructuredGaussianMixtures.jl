@@ -71,6 +71,13 @@ function fit!(
     return state.model
 end
 
+function _covariance(s::IsotropicCovariance, m::Exact, current, R, w)
+    v=sum(_variance(R, w))/size(R, 1)
+    variance=v+m.regularization
+    g=MvNormal(zeros(size(R, 1)), sqrt(variance))
+    return g, _exact_report(g, length(g)*v/variance)
+end
+
 # Component weights retain their masses: tied updates must pool within-component
 # statistics before normalization, rather than average component covariances.
 function _fit_components(s::MixtureSpec, m::CovarianceMethod, current, X, weights)
@@ -82,4 +89,46 @@ function _fit_components(s::MixtureSpec, m::CovarianceMethod, current, X, weight
         push!(reports, state.report)
     end
     return fitted, reports
+end
+function _fit_components(
+    s::MixtureSpec{S}, m::Exact, current, X, weights
+) where {S<:Union{FullCovariance,DiagonalCovariance,IsotropicCovariance}}
+    isempty(s.tied.parameters) && return invoke(
+        _fit_components,
+        Tuple{MixtureSpec,CovarianceMethod,Any,Any,Any},
+        s,
+        m,
+        current,
+        X,
+        weights,
+    )
+    masses=vec(sum(weights; dims=1))
+    total=sum(masses)
+    means=X*weights ./ masses'
+    p=size(X, 1)
+    scatter=s.covariance isa FullCovariance ? zeros(p, p) : zeros(p)
+    for k in 1:s.k
+        R=X .- view(means, :, k)
+        w=view(weights, :, k)
+        if s.covariance isa FullCovariance
+            scatter .+= (R .* w')*R'
+        else
+            scatter .+= _variance(R, w)
+        end
+    end
+    scatter ./= total
+    g=if s.covariance isa FullCovariance
+        MvNormal(zeros(p), Symmetric(scatter+m.regularization*I))
+    elseif s.covariance isa DiagonalCovariance
+        MvNormal(zeros(p), Diagonal(scatter .+ m.regularization))
+    else
+        MvNormal(zeros(p), sqrt(sum(scatter)/p+m.regularization))
+    end
+    quad=if s.covariance isa FullCovariance
+        tr(g.Σ \ scatter)
+    else
+        sum(scatter ./ var(g))
+    end
+    # One report describes the joint covariance solve, not k independent solves.
+    return [_remean(g, means[:, k]) for k in 1:s.k], [_exact_report(g, quad)]
 end

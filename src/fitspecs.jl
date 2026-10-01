@@ -4,6 +4,8 @@ abstract type GaussianStructure end
 struct FullCovariance <: GaussianStructure end
 """Independent coordinates with positive variances."""
 struct DiagonalCovariance <: GaussianStructure end
+"""Equal positive variance in every coordinate: `σ² I`."""
+struct IsotropicCovariance <: GaussianStructure end
 """Covariance `F*F' + Diagonal(D)` with `r` loading columns."""
 struct LowRankDiagonal <: GaussianStructure
     r::Int
