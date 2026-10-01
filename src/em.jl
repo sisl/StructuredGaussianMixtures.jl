@@ -66,6 +66,13 @@ function fit!(state::MixtureWorkspace, m::EM, X::AbstractMatrix; weights=nothing
                 )
                 push!(inner_reports, localstate.report)
             end
+            any(r -> r.status==:failed, inner_reports) && throw(
+                ArgumentError(
+                    "covariance fitting failed: "*join(
+                        [r.message for r in inner_reports if r.status==:failed], "; "
+                    ),
+                ),
+            )
             typed_components=Vector{typeof(first(newcomponents))}(newcomponents)
             candidate=MixtureModel(typed_components, mass ./ sum(mass))
             candidate_joints=_logjoints(candidate, X)

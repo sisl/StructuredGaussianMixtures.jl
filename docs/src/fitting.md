@@ -182,3 +182,6 @@ staging are not retained. Use explicit continuation for staged budgets.
 The implementation no longer depends on GaussianMixtures.jl. Random initialization
 and trajectories differ; predictions and supported model families remain available.
 Distribution operations retain the PR1 interfaces described in the Gaussian guides.
+
+If an inner covariance solver reports `:failed`, outer EM retains the last valid
+mixture and reports the inner failure instead of accepting that candidate.
