@@ -32,6 +32,9 @@ state.report
 - `LowRankDiagonal(r)` uses `CovarianceEM()` without forming a dense covariance.
 - `LatentCovariance(r)` with `Tied(:F,:D)` uses `PCAEM(latent_method=EM(...))`.
   It retains the PCA loading and component latent covariances in `LatentMvNormal`.
+- `ToeplitzCovariance()` uses `ToeplitzMLE()` for iterative stationary covariance fitting.
+  Its `ToeplitzMvNormal` output caches innovations for scoring; fitting uses native L-BFGS,
+  structured objective evaluation, and dense accepted-step gradients.
 - All fitting paths accept `weights=...` and fresh fits accept `rng=...`.
 - Native `EM` provides convergence reports, restarts and weighted updates.
   `responsibilities(gmm, X)` returns posterior membership probabilities;
