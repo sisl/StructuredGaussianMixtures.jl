@@ -242,13 +242,6 @@ Near-singular covariances may lose numerical accuracy in this recurrence; invali
 innovation variances are rejected. See the [SciPy Toeplitz solver notes](https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.solve_toeplitz.html)
 for the numerical tradeoff of Levinson–Durbin methods.
 
-Fitting is currently a **dense reference implementation**: scatter and gradient
-storage are O(p²), and each objective/gradient evaluation uses O(p³) work.
-Backtracking can require multiple evaluations. This is intended for moderate
-feature dimensions, not a scalable structured optimizer. There are no optional
-or mandatory new dependencies. More sophisticated solvers can later implement
-the same covariance fitting interface, using extensions when dependencies are needed.
-
 `cov` explicitly materializes the dense covariance, and `invcov` materializes its dense inverse in O(p²) using the same structured recurrence. Arbitrary marginals and conditional
 `predict` return dense `MvNormal` distributions because Toeplitz structure need not
 survive selection or conditioning. Conditioning constructs only the selected observed/target covariance blocks from
