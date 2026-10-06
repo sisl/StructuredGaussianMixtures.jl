@@ -7,7 +7,7 @@ using LinearAlgebra
 using SparseArrays
 const SGM=StructuredGaussianMixtures
 SGM._glasso_backend(::SGM.GraphicalLasso) = true
-function SGM._glasso_solve(m::SGM.GraphicalLasso, current, S)
+function SGM._glasso_external(m::SGM.GraphicalLasso, current, S)
     p=size(S, 1)
     scatter=Matrix(S)+m.regularization*I
     Q=Convex.Semidefinite(p)

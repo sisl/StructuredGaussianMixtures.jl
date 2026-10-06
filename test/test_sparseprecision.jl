@@ -59,16 +59,53 @@ using StructuredGaussianMixtures
     @test_throws DimensionMismatch logpdf(g, ones(2))
     @test_throws ArgumentError GraphicalLasso(penalty=-1)
     @test_throws ArgumentError GraphicalLasso(kkt_tol=0)
-    if Base.get_extension(
-        StructuredGaussianMixtures, :StructuredGaussianMixturesConvexExt
-    )===nothing
-        err=try
-            fit(SparsePrecision(), GraphicalLasso(), X)
-            nothing
-        catch e
-            e
-        end
-        @test err isa ArgumentError
-        @test occursin("using Convex", sprint(showerror, err))
-    end
+end
+
+@testset "Native graphical lasso fitting" begin
+    rng=MersenneTwister(91)
+    X=[1.0 0.6 0.0; 0.0 1.0 0.2; 0.0 0.0 1.0]*randn(rng,3,500)
+    w=rand(rng,500); w/=sum(w)
+    mu=X*w; R=X .- mu; S=(R .* w')*R'
+    method=GraphicalLasso(penalty=0.1, kkt_tol=1e-8,zero_tol=1e-9)
+    result=fit(SparsePrecision(),method,X;weights=w,report=true)
+    @test result.report.status==:converged
+    @test mean(result.model) ≈ mu
+    Q=Matrix(Distributions.invcov(result.model))
+    @test StructuredGaussianMixtures._glasso_kkt(Q,S+method.regularization*I,method.penalty)<3e-8
+    @test result.report.observed_objective ≈ dot(w,logpdf(result.model,X))
+    @test isposdef(Symmetric(Q))
+    exact=fit(SparsePrecision(),GraphicalLasso(penalty=0, regularization=0),X;weights=w)
+    @test cov(exact) ≈ S rtol=1e-6
+    diagonal=fit(SparsePrecision(),GraphicalLasso(penalty=10),X;weights=w)
+    @test isdiag(Distributions.invcov(diagonal))
+    @test cov(diagonal) ≈ Diagonal(diag(S).+1e-6)
+    state=workspace(SparsePrecision(),method,result.model)
+    fit!(state,method,X;weights=w)
+    @test cov(state.model) ≈ cov(result.model) rtol=1e-6
+    shifted=X .+ 0.05randn(rng,size(X))
+    fit!(state,method,shifted;weights=w)
+    cold=fit(SparsePrecision(),method,shifted;weights=w)
+    @test cov(state.model) ≈ cov(cold) rtol=1e-6
+    singular=vcat(X,X[1:1,:])
+    robust=fit(SparsePrecision(),method,singular;report=true)
+    @test robust.report.status==:converged
+    @test isposdef(Symmetric(cov(robust.model)))
+    limited=fit(SparsePrecision(),GraphicalLasso(penalty=0.03,maxiter=1,inner_maxiter=1,kkt_tol=1e-12),randn(rng,20,50);report=true)
+    @test limited.report.status==:iteration_limit
+    @test isposdef(Symmetric(cov(limited.model)))
+    @test cov(fit(SparsePrecision(),method,hcat(X,fill(1e9,3));weights=vcat(w,0))) ≈ cov(result.model)
+    @test_throws ArgumentError GraphicalLasso(maxiter=0)
+    scalar=fit(SparsePrecision(),method,X[1:1,:];weights=w)
+    @test cov(scalar)[1,1] ≈ S[1,1]+method.regularization
+    mixture=initialize(MixtureSpec(SparsePrecision(),2),EM(covariance_method=method),X;rng=MersenneTwister(12))
+    fit!(mixture,EM(covariance_method=method,maxiter=2,tol=0),X;weights=w)
+    @test mixture.report.status==:iteration_limit
+    @test mixture.report.objective ≈ dot(w,logpdf(mixture.model,X))
+    @test all(r->r.status==:converged,mixture.inner_reports)
+    # Analytic 2x2 dual: soft-threshold the empirical off diagonal.
+    X2=X[1:2,:]
+    mu2=X2*w; R2=X2.-mu2; S2=(R2.*w')*R2'
+    expected=copy(S2)+method.regularization*I
+    expected[1,2]=expected[2,1]=sign(S2[1,2])*max(abs(S2[1,2])-method.penalty,0)
+    @test cov(fit(SparsePrecision(),method,X2;weights=w)) ≈ expected rtol=1e-6
 end

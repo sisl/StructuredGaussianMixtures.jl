@@ -42,6 +42,7 @@ Install with `Pkg.add("StructuredGaussianMixtures")`. See the
 initialization and migration from the former EM/FactorEM/PCAEM interface.
 
 Sparse precision Gaussians support sparse scoring and conditioning without an
-optimization dependency. To fit graphical lasso models, load the optional
-`Convex` extension and supply a conic optimizer; see
+optimization dependency. To fit graphical lasso models, use the default
+native graphical-lasso solver, or optionally supply a conic optimizer through the
+`Convex` extension; see
 [the sparse precision guide](docs/src/sparseprecision.md).

@@ -74,5 +74,6 @@ using StructuredGaussianMixtures, Convex, SCS
     @test initial.report.status==:failed
     @test initial.model===old
     @test occursin("solver", initial.report.message)
-    @test_throws ArgumentError fit(SparsePrecision(), GraphicalLasso(), X)
+    native=fit(SparsePrecision(), GraphicalLasso(penalty=0.15, kkt_tol=1e-7, zero_tol=1e-8), X; weights=w)
+    @test cov(native) ≈ cov(g) rtol=1e-3
 end

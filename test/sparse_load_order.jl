@@ -7,7 +7,7 @@ else
     @test Base.get_extension(
         StructuredGaussianMixtures, :StructuredGaussianMixturesConvexExt
     )===nothing
-    @test_throws ArgumentError fit(SparsePrecision(), GraphicalLasso(), ones(2, 4))
+    @test fit(SparsePrecision(), GraphicalLasso(), ones(2, 4)) isa SparsePrecisionMvNormal
     using Convex
 end
 @test Base.get_extension(
