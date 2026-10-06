@@ -82,6 +82,12 @@ end
     state=workspace(SparsePrecision(),method,result.model)
     fit!(state,method,X;weights=w)
     @test cov(state.model) ≈ cov(result.model) rtol=1e-6
+    @test state.report.iterations==0
+    changed_method=GraphicalLasso(penalty=0.2,kkt_tol=1e-8,zero_tol=1e-9)
+    changed_state=workspace(SparsePrecision(),changed_method,result.model)
+    fit!(changed_state,changed_method,X;weights=w)
+    @test changed_state.report.iterations>0
+    @test cov(changed_state.model) ≈ cov(fit(SparsePrecision(),changed_method,X;weights=w)) rtol=1e-6
     shifted=X .+ 0.05randn(rng,size(X))
     fit!(state,method,shifted;weights=w)
     cold=fit(SparsePrecision(),method,shifted;weights=w)
@@ -114,4 +120,27 @@ end
     @test aggressive.report.status==:converged
     @test cov(aggressive.model) ≈ expected rtol=1e-6
     @test !isdiag(Distributions.invcov(aggressive.model))
+end
+
+@testset "Graphical lasso screening and coefficient support" begin
+    S=[2.0 0.4 0.02 0.0; 0.4 1.0 0.0 0.01; 0.02 0.0 3.0 0.5; 0.0 0.01 0.5 2.0]
+    method=GraphicalLasso(penalty=0.1,kkt_tol=1e-8,zero_tol=0)
+    groups=StructuredGaussianMixtures._glasso_components(S,method.penalty)
+    @test groups==[[1,2],[3,4]]
+    screened, report=StructuredGaussianMixtures._glasso_native(method,nothing,S)
+    unscreened, reference=StructuredGaussianMixtures._glasso_native_core(method,nothing,S)
+    @test report.status==:converged
+    @test cov(screened) ≈ cov(unscreened) rtol=1e-6
+    @test report.objective ≈ reference.objective
+    @test report.observed_objective ≈ reference.observed_objective
+    @test all(iszero,Matrix(Distributions.invcov(screened))[1:2,3:4])
+    # Construct an exact sparse optimum through its KKT equations. zero_tol=0
+    # means the lasso support, rather than magnitude thresholding, recovers zeros.
+    Q=Matrix(spdiagm(0=>fill(4.0,8),1=>fill(-0.4,7),-1=>fill(-0.4,7)))
+    scatter=inv(Q)-0.01 .* sign.(Q-Diagonal(diag(Q)))
+    fitted, result=StructuredGaussianMixtures._glasso_native(
+        GraphicalLasso(penalty=0.01,regularization=0,kkt_tol=1e-8,zero_tol=0),nothing,scatter)
+    @test result.status==:converged
+    @test Matrix(Distributions.invcov(fitted)) ≈ Q atol=1e-6
+    @test all(iszero, Matrix(Distributions.invcov(fitted))[abs.((1:8) .- (1:8)') .> 1])
 end

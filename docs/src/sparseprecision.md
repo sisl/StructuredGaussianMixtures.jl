@@ -30,7 +30,13 @@ no additional dependencies. It follows the block updates of
 [Friedman, Hastie, and Tibshirani](https://pmc.ncbi.nlm.nih.gov/articles/PMC3019769/),
 with unpenalized diagonals, and uses dense working matrices while learning a
 sparse precision. Storage is quadratic; runtime depends on sparsity, conditioning,
-and the number of block/lasso sweeps. It does not construct a semidefinite program.
+and the number of block/lasso sweeps. It does not construct a semidefinite program. Exact connected-component
+screening of `abs.(S) .> penalty` splits independent subproblems before fitting;
+threshold edges identify the partition, **not** the final precision support
+([Mazumder and Hastie, 2012](https://www.jmlr.org/beta/papers/v13/mazumder12a.html)).
+Within each block, solved lasso coefficients and their exact zeros are retained
+between sweeps. The candidate precision also uses zeros agreed on by both
+lasso directions, and is accepted only after SPD and full KKT verification.
 
 ```julia
 using StructuredGaussianMixtures, Random
@@ -44,7 +50,9 @@ mixture = fit(MixtureSpec(SparsePrecision(), 2),
 ```
 
 The native solver uses a feasible positive-definite covariance warm start when
-available; otherwise it constructs one from the scatter. `maxiter` limits full
+available; otherwise it constructs one from the scatter. A supplied precision
+already satisfying KKT is returned with zero iterations. Zero penalty uses a
+direct precision solve. `maxiter` limits full
 block sweeps, and `inner_maxiter` limits coordinate sweeps within each lasso.
 Convergence requires the final returned precision to pass the KKT check.
 Exhaustion returns an SPD estimate with `:iteration_limit`, never a convergence

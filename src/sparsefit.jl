@@ -94,7 +94,73 @@ _glasso_external(m, current, S) = throw(ArgumentError("Load `using Convex` for a
 # Dual block-coordinate graphical lasso. W is the covariance dual variable,
 # diag(W)=diag(scatter), |W-scatter| <= lambda off diagonal. Each block update
 # solves a lasso and preserves positive definiteness (up to roundoff).
+# Thresholded-scatter components exactly partition the graphical-lasso solution.
+# In particular, irrelevant low-variance coordinates never enter a dense solve.
+function _glasso_components(S, penalty)
+    remaining=trues(size(S,1))
+    groups=Vector{Int}[]
+    for start in axes(S,1)
+        remaining[start] || continue
+        group=[start]; remaining[start]=false
+        cursor=1
+        while cursor<=length(group)
+            j=group[cursor]
+            for i in axes(S,1)
+                if remaining[i] && abs(S[i,j])>penalty
+                    push!(group,i); remaining[i]=false
+                end
+            end
+            cursor+=1
+        end
+        push!(groups,sort!(group))
+    end
+    return groups
+end
 function _glasso_native(m, current, S)
+    scatter=Matrix(S)+m.regularization*I
+    threshold=m.kkt_tol*(1+maximum(abs,scatter))
+    warmQ=m.warmstart && current!==nothing ? Matrix(current.Q) : nothing
+    warmres=warmQ===nothing ? Inf : _glasso_kkt(warmQ,scatter,m.penalty)
+    if m.penalty==0 || warmres<=threshold
+        Q=m.penalty==0 ? inv(cholesky(Symmetric(scatter))) : warmQ
+        model=SparsePrecisionMvNormal(zeros(size(S,1)),sparse(Q))
+        report=FitReport(;kind=:penalized_covariance_loglikelihood)
+        residual=m.penalty==0 ? _glasso_kkt(Q,scatter,0) : warmres
+        report.status=residual<=threshold ? :converged : :iteration_limit
+        report.iterations=m.penalty==0 ? 1 : 0
+        penalty=m.penalty*(sum(abs,Q)-sum(abs,diag(Q)))
+        report.objective=-0.5*(size(S,1)*log(2π)-logdet(model.factor)+sum(scatter .* Q)+penalty)
+        report.observed_objective=-0.5*(size(S,1)*log(2π)-logdet(model.factor)+sum(S .* Q))
+        push!(report.history,report.objective)
+        source=m.penalty==0 ? "zero-penalty direct precision solve" : "warm precision already satisfies KKT"
+        report.message="$source; KKT residual=$residual; tolerance=$threshold"
+        return model,report
+    end
+    groups=_glasso_components(S,m.penalty)
+    length(groups)==1 && return _glasso_native_core(m,current,S)
+    p=size(S,1)
+    Q=zeros(p,p)
+    reports=FitReport[]
+    for group in groups
+        initial=current===nothing ? nothing : SparsePrecisionMvNormal(zeros(length(group)),current.Q[group,group])
+        model, inner=_glasso_native_core(m,initial,S[group,group])
+        Q[group,group] .= Matrix(model.Q)
+        push!(reports,inner)
+    end
+    model=SparsePrecisionMvNormal(zeros(p),sparse(Q))
+    report=FitReport(;kind=:penalized_covariance_loglikelihood)
+    report.iterations=maximum(r.iterations for r in reports)
+    report.status=all(r.status==:converged for r in reports) ? :converged : :iteration_limit
+    report.history=[sum(r.history[min(i,length(r.history))] for r in reports) for i in 1:report.iterations]
+    report.objective=sum(r.objective for r in reports)
+    report.observed_objective=sum(r.observed_objective for r in reports)
+    residual=_glasso_kkt(Q,Matrix(S)+m.regularization*I,m.penalty)
+    threshold=m.kkt_tol*(1+maximum(abs,Matrix(S)+m.regularization*I))
+    report.status==:converged && residual>threshold && (report.status=:iteration_limit)
+    report.message="native block-coordinate graphical lasso; screened blocks=$(length(groups)), largest=$(maximum(length,groups)); KKT residual=$residual; tolerance=$threshold; largest block diagnostics: "*reports[argmax(length.(groups))].message
+    return model,report
+end
+function _glasso_native_core(m, current, S)
     p=size(S, 1)
     scatter=Matrix(S)+m.regularization*I
     all(>(0), diag(scatter)) || throw(ArgumentError("zero variance: use positive regularization"))
@@ -114,18 +180,29 @@ function _glasso_native(m, current, S)
     isposdef(Symmetric(W)) || throw(ArgumentError("singular scatter with zero penalty: use positive regularization"))
     report=FitReport(; kind=:penalized_covariance_loglikelihood)
     beta=zeros(p-1); residual=zeros(p-1); block=zeros(p-1,p-1)
+    # Retain the solved lasso coefficients, including their exact zeros. An
+    # inverse covariance reconstruction each sweep introduces dense roundoff
+    # entries and discards the block solver's own warm-start information.
+    coefficients=zeros(p,p)
+    if m.warmstart && current!==nothing
+        for j in 1:p
+            coefficients[:,j] .= -Vector(current.Q[:,j]) ./ current.Q[j,j]
+            coefficients[j,j]=0
+        end
+    end
     threshold=m.kkt_tol*(1+maximum(abs, scatter))
     Q=inv(Symmetric(W))
     finalres=Inf
+    coordinate_sweeps=0
     for sweep in 1:m.maxiter
         for j in 1:p
             idx=[1:j-1; j+1:p]
             copyto!(block, view(W, idx, idx))
-            # Recover a warm lasso coefficient vector for this current block.
-            beta .= view(Q, idx, j) ./ -Q[j,j]
+            beta .= view(coefficients,idx,j)
             mul!(residual, block, beta)
             residual .= view(scatter, idx, j) .- residual
             for inner in 1:m.inner_maxiter
+                coordinate_sweeps+=1
                 delta=0.0
                 for i in eachindex(beta)
                     old=beta[i]
@@ -140,6 +217,7 @@ function _glasso_native(m, current, S)
                 end
                 delta <= threshold*0.01 && break
             end
+            coefficients[idx,j] .= beta
             mul!(residual, block, beta)
             # An prematurely stopped lasso can violate the Schur complement.
             # Preserve the last SPD iterate rather than publishing that update.
@@ -154,7 +232,8 @@ function _glasso_native(m, current, S)
         # zero_tol must not destroy a valid unthresholded solution.
         candidate=copy(Q)
         for j in 1:p, i in 1:p
-            i!=j && abs(candidate[i,j])<=m.zero_tol && (candidate[i,j]=0)
+            i!=j && (abs(candidate[i,j])<=m.zero_tol ||
+                (coefficients[i,j]==0 && coefficients[j,i]==0)) && (candidate[i,j]=0)
         end
         candidate_residual=isposdef(Symmetric(candidate)) ?
             _glasso_kkt(candidate, scatter, m.penalty) : Inf
@@ -176,7 +255,7 @@ function _glasso_native(m, current, S)
     end
     model=SparsePrecisionMvNormal(zeros(p), sparse(Q))
     report.observed_objective=-0.5*(p*log(2π)-logdet(model.factor)+sum(S .* Q))
-    report.message="native block-coordinate graphical lasso; KKT residual=$finalres; tolerance=$threshold"
+    report.message="native block-coordinate graphical lasso; coordinate sweeps=$coordinate_sweeps; KKT residual=$finalres; tolerance=$threshold"
     return model, report
 end
 function _glasso_kkt(Q, S, λ)
