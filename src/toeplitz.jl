@@ -1,23 +1,26 @@
 """Positive definite stationary covariance with constant diagonals (one lag per coordinate separation)."""
 struct ToeplitzCovariance <: GaussianStructure end
 
-"""Iterative Toeplitz covariance likelihood fitting by SPD Armijo steps.
+"""Iterative Toeplitz covariance likelihood fitting by limited-memory BFGS with SPD Armijo steps.
 `regularization` adds a ridge to the empirical scatter (a precision-trace penalty).
 `tol` controls the scaled lag-gradient norm; `maxiter` and `max_backtracks` bound work.
-No global optimum is guaranteed. Fitting currently uses dense sufficient statistics.
+`memory` controls the number of retained curvature pairs. No global optimum is
+guaranteed. Fitting uses dense sufficient statistics and O(p³) accepted-step gradients.
 """
 struct ToeplitzMLE <: CovarianceMethod
     regularization::Float64
     maxiter::Int
     tol::Float64
     max_backtracks::Int
-    function ToeplitzMLE(; regularization=1e-6, maxiter=200, tol=1e-6, max_backtracks=60)
+    memory::Int
+    function ToeplitzMLE(; regularization=1e-6, maxiter=200, tol=1e-6, max_backtracks=60, memory=10)
         isfinite(regularization) && regularization>=0 ||
             throw(ArgumentError("regularization must be finite and nonnegative"))
         maxiter>=0 && max_backtracks>0 || throw(ArgumentError("invalid iteration limit"))
         isfinite(tol) && tol>=0 ||
             throw(ArgumentError("tol must be finite and nonnegative"))
-        return new(regularization, maxiter, tol, max_backtracks)
+        memory>0 || throw(ArgumentError("memory must be positive"))
+        return new(regularization, maxiter, tol, max_backtracks, memory)
     end
 end
 
@@ -80,7 +83,7 @@ Distributions.var(g::ToeplitzMvNormal) = fill(g.c[1], length(g))
 Distributions.cov(g::ToeplitzMvNormal) = _toeplitz_matrix(g.c)
 Distributions.logdetcov(g::ToeplitzMvNormal) = g.logdeterminant
 # Explicit precision requests materialize the dense inverse covariance.
-Distributions.invcov(g::ToeplitzMvNormal) = Matrix(Symmetric(g.W' * g.W))
+Distributions.invcov(g::ToeplitzMvNormal) = first(_toeplitz_precision(g.c))
 function Distributions.sqmahal(g::ToeplitzMvNormal, x::AbstractVector)
     length(x)==length(g) || throw(DimensionMismatch("observation dimension mismatch"))
     return sum(abs2, g.W*(x-g.μ))
@@ -187,15 +190,64 @@ function workspace(
     return GaussianWorkspace(s, deepcopy(g), FitReport())
 end
 
-# Objective and lag gradient for f(T)=logdet(T)+tr(T^-1 S).
-# G=T^-1-T^-1 S T^-1; lag derivatives sum both corresponding diagonals.
-function _toeplitz_objective_gradient(c, S)
-    factor=cholesky(Symmetric(_toeplitz_matrix(c)))
-    precision=factor \ Matrix{Float64}(I, length(c), length(c))
-    objective=logdet(factor)+sum(precision .* S)
+# Durbin gives the first inverse column. The Gohberg–Semencul displacement
+# recurrence fills the remaining entries in O(p²), without a dense inversion.
+function _toeplitz_precision(c)
+    p=length(c)
+    variance=c[1]
+    isfinite(variance) && variance>0 || throw(PosDefException(1))
+    ld=log(variance)
+    a=Float64[]
+    for m in 1:(p-1)
+        reflection=(c[m+1]-dot(a, @view(c[m:-1:2])))/variance
+        isfinite(reflection) && abs(reflection)<1 || throw(PosDefException(m+1))
+        a=vcat(a-reflection*reverse(a), reflection)
+        variance*=1-reflection^2
+        isfinite(variance) && variance>0 || throw(PosDefException(m+1))
+        ld+=log(variance)
+    end
+    x=vcat(1.0, -a) ./ variance
+    Q=Matrix{Float64}(undef, p, p)
+    Q[:,1]=x
+    Q[1,:]=x
+    for j in 2:p, i in j:p
+        Q[i,j]=Q[i-1,j-1]+(x[i]*x[j]-x[p-i+2]*x[p-j+2])/x[1]
+        Q[j,i]=Q[i,j]
+    end
+    return Q, ld
+end
+
+function _toeplitz_objective(c, S)
+    precision, ld=_toeplitz_precision(c)
+    return ld+sum(precision .* S), precision
+end
+
+# The empirical scatter is not Toeplitz. Its dense products still cost O(p³),
+# but are evaluated only once per accepted iterate, never during backtracking.
+function _toeplitz_gradient(precision, S)
     G=precision-precision*S*precision
-    gradient=[lag==0 ? tr(G) : 2sum(diag(G, lag)) for lag in 0:(length(c) - 1)]
-    return objective, gradient
+    return [lag==0 ? tr(G) : 2sum(diag(G, lag)) for lag in 0:(size(S,1)-1)]
+end
+function _toeplitz_objective_gradient(c, S)
+    objective, precision=_toeplitz_objective(c, S)
+    return objective, _toeplitz_gradient(precision, S)
+end
+
+function _toeplitz_direction(gradient, steps, changes)
+    q=copy(gradient)
+    alpha=zeros(length(steps))
+    for j in length(steps):-1:1
+        alpha[j]=dot(steps[j],q)/dot(steps[j],changes[j])
+        q .-= alpha[j] .* changes[j]
+    end
+    if !isempty(steps)
+        q .*= dot(last(steps),last(changes))/sum(abs2,last(changes))
+    end
+    for j in eachindex(steps)
+        beta=dot(changes[j],q)/dot(steps[j],changes[j])
+        q .+= (alpha[j]-beta) .* steps[j]
+    end
+    return -q
 end
 function _covariance(s::ToeplitzCovariance, m::ToeplitzMLE, current, R, w)
     scatter=(R .* w')*R'
@@ -214,20 +266,41 @@ function _covariance(s::ToeplitzCovariance, m::ToeplitzMLE, current, R, w)
     end)
     offset=length(c)*(log(2π)+log(scale))
     push!(report.history, -0.5*(offset+value))
+    steps=Vector{Float64}[]
+    changes=Vector{Float64}[]
     for iteration in 1:m.maxiter
         if m.tol>0 && norm(gradient, Inf)<=m.tol
             report.status=:converged
             break
         end
+        direction=_toeplitz_direction(gradient, steps, changes)
+        slope=dot(gradient,direction)
+        if !isfinite(slope) || slope>=0
+            empty!(steps)
+            empty!(changes)
+            direction=-gradient
+            slope=-sum(abs2,gradient)
+        end
         step=1.0
         accepted=false
         for backtrack in 1:m.max_backtracks
-            candidate=c-step*gradient
+            candidate=c+step*direction
             try
-                trial, trial_gradient=_toeplitz_objective_gradient(candidate, target)
+                trial, trial_precision=_toeplitz_objective(candidate, target)
                 if isfinite(trial) &&
-                    all(isfinite, trial_gradient) &&
-                    trial<=value-1e-4*step*sum(abs2, gradient)
+                    trial<=value+1e-4*step*slope
+                    trial_gradient=_toeplitz_gradient(trial_precision,target)
+                    all(isfinite,trial_gradient) || break
+                    displacement=candidate-c
+                    change=trial_gradient-gradient
+                    if dot(displacement,change)>1e-10*norm(displacement)*norm(change)
+                        push!(steps,displacement)
+                        push!(changes,change)
+                        if length(steps)>m.memory
+                            popfirst!(steps)
+                            popfirst!(changes)
+                        end
+                    end
                     c=candidate
                     value=trial
                     gradient=trial_gradient

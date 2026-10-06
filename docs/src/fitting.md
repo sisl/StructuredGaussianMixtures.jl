@@ -207,13 +207,22 @@ positive definite symmetric Toeplitz matrices, where `S` is weighted centered
 scatter. This is the Gaussian covariance likelihood when regularization is zero;
 otherwise it includes a precision-trace penalty. It **does not** label diagonal
 averaging as an MLE. Fresh initialization is isotropic; continuation starts at
-the supplied covariance. Gradient steps on lag coefficients use backtracking to
+the supplied covariance. Limited-memory BFGS steps on lag coefficients use backtracking to
 maintain positive definiteness and Armijo descent. The objective is nonconvex;
 there is no global-optimum guarantee. `:converged` requires the infinity norm of
 the lag gradient to meet `tol`, after scaling the scatter to average variance
 one. `:iteration_limit` and exhausted-line-search `:failed` are separate outcomes.
 `maxiter=0` evaluates the initialized state. No variance floor is silently applied.
-Positive regularization is recommended for degenerate data.
+Positive regularization is recommended for degenerate data. `memory=10` retains up
+to ten curvature pairs; pairs with insufficient positive curvature are skipped.
+
+Fitting constructs precision matrices with a Durbin/Gohberg–Semencul recurrence
+in O(p²) time and storage. Backtracking evaluates only the objective, also O(p²),
+and computes a gradient only after accepting a step. The gradient still uses
+dense products with the empirical scatter, costing O(p³) per accepted step;
+this is not a near-linear Toeplitz MLE solver. Sufficient-statistic construction
+costs O(np²), and the optimizer stores O(p × memory) curvature history in addition
+to dense matrices. No optional optimization dependency is required.
 
 The inner report uses `:penalized_covariance_loglikelihood` for positive
 regularization and stores ordinary weighted likelihood in `observed_objective`.
@@ -240,7 +249,7 @@ feature dimensions, not a scalable structured optimizer. There are no optional
 or mandatory new dependencies. More sophisticated solvers can later implement
 the same covariance fitting interface, using extensions when dependencies are needed.
 
-`cov` explicitly materializes the dense covariance, and `invcov` materializes its dense inverse. Arbitrary marginals and conditional
+`cov` explicitly materializes the dense covariance, and `invcov` materializes its dense inverse in O(p²) using the same structured recurrence. Arbitrary marginals and conditional
 `predict` return dense `MvNormal` distributions because Toeplitz structure need not
 survive selection or conditioning. Conditioning constructs only the selected observed/target covariance blocks from
 lag entries, without materializing the full covariance. It uses a dense solve in

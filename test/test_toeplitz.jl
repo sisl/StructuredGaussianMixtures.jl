@@ -68,6 +68,29 @@ using Test, Random, Distributions, LinearAlgebra, Statistics
         delta[j]=1e-6
         @test gradient[j] ≈ (independent(c+delta)-independent(c-delta))/2e-6 rtol=1e-6
     end
+    # Structured inverse recurrence agrees with dense solves for mixtures of
+    # autocovariances, including nearly singular and negative correlations.
+    for p in (1, 3, 19, 64), rho in (-0.97, 0.3, 0.999)
+        c=0.7 .* rho .^ (0:p-1)+0.3 .* 0.4 .^ (0:p-1)
+        Q, ld=StructuredGaussianMixtures._toeplitz_precision(c)
+        T=StructuredGaussianMixtures._toeplitz_matrix(c)
+        @test Q ≈ inv(T) rtol=1e-9
+        @test Q*T ≈ Matrix(I,p,p) atol=1e-9
+        @test ld ≈ logdet(Symmetric(T)) atol=1e-9
+    end
+    @test_throws PosDefException StructuredGaussianMixtures._toeplitz_precision([1.,2.])
+    @test_throws ArgumentError ToeplitzMLE(memory=0)
+    # Known population optimum: exact Toeplitz scatter must be recovered from
+    # isotropic initialization, without needing thousands of gradient steps.
+    p=12
+    truth=ToeplitzMvNormal(zeros(p), 0.75 .^ (0:p-1))
+    population=sqrt(p)*Matrix(cholesky(Symmetric(cov(truth))).L)
+    optimized, inner=StructuredGaussianMixtures._covariance(
+        ToeplitzCovariance(), ToeplitzMLE(regularization=0,maxiter=200,tol=1e-6),
+        ToeplitzMvNormal(zeros(p),vcat(1.,zeros(p-1))), population,fill(1/p,p))
+    @test inner.status==:converged
+    @test cov(optimized) ≈ cov(truth) atol=1e-6
+    @test minimum(diff(inner.history)) >= -1e-12
     # Dimension two has a closed-form constrained optimum in fixed eigenvectors.
     X=[2.0 1.0 -2.0 3.0 0.0; -1.0 2.0 0.0 1.0 3.0]
     counts=[1, 3, 2, 4, 1]
