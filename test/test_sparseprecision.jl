@@ -108,4 +108,10 @@ end
     expected=copy(S2)+method.regularization*I
     expected[1,2]=expected[2,1]=sign(S2[1,2])*max(abs(S2[1,2])-method.penalty,0)
     @test cov(fit(SparsePrecision(),method,X2;weights=w)) ≈ expected rtol=1e-6
+    # Thresholding away a genuine edge remains SPD, but violates KKT. Retain
+    # the converged unthresholded solution instead of exhausting the budget.
+    aggressive=fit(SparsePrecision(),GraphicalLasso(penalty=0.1,zero_tol=100,kkt_tol=1e-8),X2;weights=w,report=true)
+    @test aggressive.report.status==:converged
+    @test cov(aggressive.model) ≈ expected rtol=1e-6
+    @test !isdiag(Distributions.invcov(aggressive.model))
 end

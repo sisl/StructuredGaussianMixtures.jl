@@ -150,15 +150,20 @@ function _glasso_native(m, current, S)
         end
         Q=Matrix(inv(Symmetric(W)))
         # Numerical inversion leaves tiny entries at the lasso zeros. Only
-        # accept thresholding when SPD; always test KKT on the returned matrix.
+        # accept thresholding when both SPD and KKT hold. An aggressive
+        # zero_tol must not destroy a valid unthresholded solution.
         candidate=copy(Q)
         for j in 1:p, i in 1:p
             i!=j && abs(candidate[i,j])<=m.zero_tol && (candidate[i,j]=0)
         end
-        if isposdef(Symmetric(candidate))
+        candidate_residual=isposdef(Symmetric(candidate)) ?
+            _glasso_kkt(candidate, scatter, m.penalty) : Inf
+        if candidate_residual<=threshold
             Q=candidate
+            finalres=candidate_residual
+        else
+            finalres=_glasso_kkt(Q, scatter, m.penalty)
         end
-        finalres=_glasso_kkt(Q, scatter, m.penalty)
         objective=-0.5*(p*log(2π)-logdet(Symmetric(Q))+sum(scatter .* Q)+m.penalty*(sum(abs,Q)-sum(abs,diag(Q))))
         push!(report.history, objective)
         report.iterations=sweep

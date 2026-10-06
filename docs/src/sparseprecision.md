@@ -48,8 +48,8 @@ available; otherwise it constructs one from the scatter. `maxiter` limits full
 block sweeps, and `inner_maxiter` limits coordinate sweeps within each lasso.
 Convergence requires the final returned precision to pass the KKT check.
 Exhaustion returns an SPD estimate with `:iteration_limit`, never a convergence
-claim. Small entries are dropped using `zero_tol` only when SPD is preserved.
-An overly large threshold can prevent KKT convergence. Report iterations count
+claim. Small entries are dropped using `zero_tol` only when both SPD and KKT
+checks pass; otherwise the unthresholded precision is retained. Report iterations count
 full block sweeps and history records the penalized objective.
 
 For small reference problems, install `Convex` and a conic solver separately and
