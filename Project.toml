@@ -4,6 +4,7 @@ authors = ["Arec Jamgochian <arec.jamgochian@terraai.earth> and contributors"]
 version = "0.2.1"
 
 [deps]
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -16,7 +17,9 @@ Distributions = "0.25.120"
 LinearAlgebra = "1.11.0"
 Random = "1.11.0"
 Statistics = "1.11.1"
-julia = "1.6.7"
+julia = "1.9"
+SparseArrays = "1.9"
+Convex = "0.16"
 
 [extras]
 MultivariateStats = "6f286f6a-111f-5878-ab1e-185364afe411"
@@ -24,3 +27,9 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["MultivariateStats", "Test"]
+
+[weakdeps]
+Convex = "f65535da-76fb-5f13-bab9-19810c17039a"
+
+[extensions]
+StructuredGaussianMixturesConvexExt = "Convex"
