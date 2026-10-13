@@ -28,7 +28,8 @@ fit!(state, method, X)
 state.report
 ```
 
-- `FullCovariance()` and `DiagonalCovariance()` use `Exact()` covariance updates.
+- `FullCovariance()`, `DiagonalCovariance()`, and `IsotropicCovariance()` use `Exact()` covariance updates.
+  Add `tied=Tied(:covariance)` to `MixtureSpec` for one shared covariance with separate component means.
 - `LowRankDiagonal(r)` uses `CovarianceEM()` without forming a dense covariance.
 - `LatentCovariance(r)` with `Tied(:F,:D)` uses `PCAEM(latent_method=EM(...))`.
   It retains the PCA loading and component latent covariances in `LatentMvNormal`.
