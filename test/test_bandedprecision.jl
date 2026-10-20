@@ -56,7 +56,7 @@ end
     mu=X*w
     R=X .- mu
     S=(R .* w')*R'
-    for b in (0, 1, 3, 7), ridge in (0.0, 0.02)
+    for b in (0, 1, 3, 7), ridge in (0.0, 0.02, 1e6)
         g=fit(BandedPrecision(b), Exact(; regularization=ridge), X; weights)
         @test mean(g) ≈ mu
         C=cov(g)
@@ -64,7 +64,7 @@ end
         # Convex precision MLE stationarity on every free band entry.
         for i in 1:8, j in 1:8
             if abs(i-j)<=b
-                @test C[i, j] ≈ S[i, j]+(i==j ? ridge : 0) atol=1e-10
+                @test C[i, j] ≈ S[i, j]+(i==j ? ridge : 0) atol=1e-10 rtol=1e-12
             else
                 @test Q[i, j]==0
             end
@@ -74,6 +74,10 @@ end
         state=workspace(BandedPrecision(b), Exact(), g)
         @test cov(fit!(state, Exact(; regularization=ridge), X; weights)) ≈ C
         @test state.report.status==:converged
+        # The report uses compact sufficient statistics. Check it against
+        # independent dense scoring, including a dominating regularizer.
+        reference=MvNormal(mu, Symmetric(C))
+        @test state.report.objective ≈ dot(logpdf(reference, X), w) rtol=1e-12
     end
     mixture=fit(
         MixtureSpec(BandedPrecision(2), 2), EM(; maxiter=3), X; rng=MersenneTwister(2)
@@ -113,6 +117,49 @@ end
     fit!(state, EM(covariance_method=Exact(regularization=0), maxiter=1), singular)
     @test state.report.status==:failed
     @test state.model === initial
+    regularized=fit(BandedPrecision(1), Exact(regularization=0.01), singular)
+    @test isposdef(Symmetric(invcov(regularized)))
+    @test all(isfinite, logpdf(regularized, singular))
+    # A zero-weight distant sample must be removed before moment arithmetic.
+    weighted=fit(
+        BandedPrecision(1),
+        Exact(),
+        hcat(data, fill(1e200, 4));
+        weights=[ones(size(data, 2)); 0.0],
+    )
+    reference=fit(BandedPrecision(1), Exact(), data)
+    @test mean(weighted) ≈ mean(reference)
+    @test cov(weighted) ≈ cov(reference)
+    # For almost collinear data, direct tr(Q*S) summation can cancel large
+    # positive and negative terms. The report must retain scoring accuracy.
+    near_singular=repeat(randn(rng, 1, 200), 6, 1)+1e-5randn(rng, 6, 200)
+    result=fit(BandedPrecision(3), Exact(regularization=1e-10), near_singular; report=true)
+    @test result.report.objective ≈ mean(logpdf(result.model, near_singular)) rtol=1e-12
+end
+
+@testset "Banded mixture conditioning without observations" begin
+    Q=[3.0 0.4 0 0; 0.4 2.0 -0.2 0; 0 -0.2 2.0 0.5; 0 0 0.5 2.0]
+    cs=[
+        BandedPrecisionMvNormal(zeros(4), Q; bandwidth=1),
+        BandedPrecisionMvNormal([1.0, -2.0, 3.0, 0.0], 2Q; bandwidth=1),
+    ]
+    mixture=MixtureModel(cs, [0.3, 0.7])
+    for outputs in ([4, 1], [4, 1, 3, 2])
+        conditional=predict(mixture, Float64[]; input_indices=Int[], output_indices=outputs)
+        reference=MixtureModel(
+            [MvNormal(mean(c)[outputs], Symmetric(cov(c)[outputs, outputs])) for c in cs],
+            [0.3, 0.7],
+        )
+        @test probs(conditional) ≈ probs(mixture)
+        @test mean(conditional) ≈ mean(reference)
+        @test cov(conditional) ≈ cov(reference)
+        @test logpdf(conditional, ones(length(outputs))) ≈
+            logpdf(reference, ones(length(outputs)))
+        for (actual, expected) in zip(components(conditional), components(reference))
+            @test mean(actual) ≈ mean(expected)
+            @test cov(actual) ≈ cov(expected)
+        end
+    end
 end
 
 @testset "Banded batched quadratic forms" begin

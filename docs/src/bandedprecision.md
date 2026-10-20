@@ -27,6 +27,9 @@ mixture = fit(MixtureSpec(BandedPrecision(2), 3), EM(maxiter=4), X;
 size(responsibilities(mixture, X))
 ```
 
+Shared precision fitting (`Tied(:covariance)`) is not implemented for this
+structure. Each mixture component currently has its own banded precision.
+
 ## Fitting and numerical behavior
 
 The band graph is decomposable. `Exact` fits each centered feature by weighted
@@ -41,7 +44,21 @@ Consequently regularized mixture iterations do not promise monotonic unpenalized
 likelihood. Rank-deficient unregularized local problems raise a factorization
 error (or produce a failed outer EM report).
 
-The fit stores only scatter bands, not a dense scatter matrix. Work is
+For feature `i`, write `P = max(1, i-b):i-1` and `S̃ = S + regularization*I`.
+The regression coefficients and conditional variance are
+`βᵢ = S̃[P,P] \ S̃[P,i]` and `vᵢ = S̃[i,i] - S̃[i,P]*βᵢ`.
+If `B` has unit diagonal and row `i` contains `-βᵢ` in columns `P`, then the
+fitted precision is `B' * Diagonal(1 ./ v) * B`. Coefficients vary by feature;
+the model does not impose stationarity. At the optimum the fitted covariance
+matches `S̃` on every free precision entry, which is also checked in the tests.
+This is the closed-form Gaussian graphical-model MLE for a decomposable graph;
+see [Dahl, Roychowdhury, and Vandenberghe](https://www.seas.ucla.edu/~vandenbe/publications/covsel1.pdf).
+
+The fit stores only scatter bands, not a dense scatter matrix. One weighted
+sample row is reused when accumulating them, using O(n) scratch storage.
+The likelihood report evaluates `tr(Q*S)` directly from the precision and scatter
+bands. If large terms cancel in an ill-conditioned problem, it falls back to
+scoring observations through the band factor. Work is
 O(n*p*b + p*b^3) for nonzero bandwidth, with the diagonal case O(n*p).
 The representation stores precision and Cholesky bands in O(p*(b+1)) space.
 Factorization takes O(p*(b+1)^2), and each score, sample, or precision solve takes
@@ -55,6 +72,10 @@ conditional = predict(g, X[1:3, 1]; input_indices=1:3, output_indices=4:8)
 marginal_model = marginal(g, [1, 4, 8])
 (mean(conditional), size(cov(marginal_model)))
 ```
+
+An empty observation vector with `input_indices=Int[]` returns the requested
+marginal. This also works for mixtures and preserves their prior component
+weights. Output order is respected.
 
 When every variable outside the output is observed, conditioning uses a principal
 precision submatrix and band solves, returning `BandedPrecisionMvNormal`.

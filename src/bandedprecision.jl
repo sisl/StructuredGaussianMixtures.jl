@@ -47,6 +47,15 @@ struct BandedPrecisionMvNormal <: Distributions.AbstractMvNormal
         end
         return new(Vector{Float64}(μ), B, L, 2sum(log, view(L, :, 1)))
     end
+    # Changing the mean cannot change the precision factorization. Copy the
+    # cached arrays so the new distribution retains the constructor's ownership.
+    function BandedPrecisionMvNormal(
+        μ::AbstractVector, g::BandedPrecisionMvNormal, ::Val{:remean}
+    )
+        length(μ)==length(g) || throw(DimensionMismatch("mean dimension mismatch"))
+        all(isfinite, μ) || throw(ArgumentError("mean must be finite"))
+        return new(Vector{Float64}(μ), copy(g.bands), copy(g.factor), g.logdet_precision)
+    end
 end
 function BandedPrecisionMvNormal(μ::AbstractVector, Q::AbstractMatrix; bandwidth::Integer)
     p=length(μ)
@@ -166,7 +175,7 @@ function Distributions._rand!(
     end
     return X
 end
-_remean(g::BandedPrecisionMvNormal, μ) = BandedPrecisionMvNormal(μ, g.bands, Val(:bands))
+_remean(g::BandedPrecisionMvNormal, μ) = BandedPrecisionMvNormal(μ, g, Val(:remean))
 function _check(s::BandedPrecision, m::CovarianceMethod, p)
     m isa Exact || throw(ArgumentError("banded precision requires Exact"))
     return s.bandwidth<p || throw(ArgumentError("bandwidth must be smaller than dimension"))
@@ -177,18 +186,20 @@ function _covariance(s::BandedPrecision, m::Exact, current, R, w)
     p=size(R, 1)
     b=s.bandwidth
     S=zeros(p, b+1)
-    for i in 1:p, delta in 0:min(b, i - 1)
-        S[i, delta + 1]=dot(view(R, i, :), w .* view(R, i-delta, :))+(
-            delta==0 ? m.regularization : 0
-        )
+    weighted_row=Vector{Float64}(undef, size(R, 2))
+    for i in 1:p
+        weighted_row .= w .* view(R, i, :)
+        for delta in 0:min(b, i - 1)
+            S[i, delta + 1]=dot(weighted_row, view(R, i-delta, :))
+        end
     end
     Q=zeros(p, b+1)
     for i in 1:p
         ids=max(1, i - b):(i - 1)
         c=[_bandentry(S, i, j) for j in ids]
-        localS=[_bandentry(S, j, k) for j in ids, k in ids]
+        localS=[_bandentry(S, j, k)+(j==k ? m.regularization : 0) for j in ids, k in ids]
         beta=isempty(ids) ? Float64[] : cholesky(Symmetric(localS))\c
-        residual=S[i, 1]-dot(c, beta)
+        residual=S[i, 1]+m.regularization-dot(c, beta)
         residual>0 || throw(PosDefException(i))
         indices=[collect(ids); i]
         coefficients=[-beta; 1.0]
@@ -202,7 +213,23 @@ function _covariance(s::BandedPrecision, m::Exact, current, R, w)
     report=FitReport(; kind=:covariance_loglikelihood)
     report.status=:converged
     report.iterations=1
-    report.objective=_objective(g, R, w)
+    # tr(Q*S) needs only the free precision entries. Reuse the unregularized
+    # scatter bands rather than score every observation again for the report.
+    quad=0.0
+    magnitude=0.0
+    for i in 1:p, delta in 0:min(b, i - 1)
+        term=(delta==0 ? 1 : 2)*Q[i, delta + 1]*S[i, delta + 1]
+        quad+=term
+        magnitude+=abs(term)
+    end
+    # Ill-conditioned problems can cancel large trace terms. The band-factor
+    # quadratic form is a sum of squares and provides a stable fallback.
+    report.objective=if !isfinite(quad) || quad<0 ||
+        eps(Float64)*magnitude>sqrt(eps(Float64))*max(1, abs(quad))
+        _objective(g, R, w)
+    else
+        -0.5*(p*log(2π)+logdetcov(g)+quad)
+    end
     push!(report.history, report.objective)
     return g, report
 end
