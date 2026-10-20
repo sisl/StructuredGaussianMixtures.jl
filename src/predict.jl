@@ -183,6 +183,7 @@ end
 Compute the conditional distribution of the output indices given the input indices for a mixture model.
 Returns a new mixture model where each component is the conditional distribution of the corresponding component,
 and the weights are updated based on the log density of x under the marginal distributions.
+With no observations, returns the output marginal with the original mixture weights.
 
 # Arguments
 - `dist`: The multivariate mixture distribution
@@ -199,6 +200,15 @@ function predict(
     input_indices::Union{Vector{Int},AbstractRange},
     output_indices::Union{Vector{Int},AbstractRange},
 )
+    length(x) == length(input_indices) ||
+        throw(DimensionMismatch("Observed values and indices must match"))
+
+    # Component prediction validates the indices and handles empty observations.
+    new_components = [
+        predict(c, x, input_indices, output_indices) for c in components(dist)
+    ]
+    isempty(input_indices) && return MixtureModel(new_components, copy(probs(dist)))
+
     # Get the number of components
     n_components = length(dist.components)
 
@@ -215,12 +225,6 @@ function predict(
     log_weights .-= maximum(log_weights)  # For numerical stability
     new_weights = exp.(log_weights)
     new_weights ./= sum(new_weights)
-
-    # Get conditional distributions for each component
-    new_components = [
-        predict(dist.components[k], x, input_indices, output_indices) for
-        k in 1:n_components
-    ]
 
     # Return the new mixture model
     return MixtureModel(new_components, new_weights)

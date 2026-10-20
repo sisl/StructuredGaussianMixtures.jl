@@ -182,3 +182,53 @@ using StructuredGaussianMixtures
     #     # Skip numerical stability tests for now as they test edge cases
     # end
 end
+
+@testset "Mixture prediction with and without observations" begin
+    rng = MersenneTwister(815)
+    p, r = 6, 2
+    F = randn(rng, p, r)
+    D = 0.5 .+ rand(rng, p)
+    A_factor = [1.0 0.3; 0.0 0.7]
+    means = [randn(rng, p), randn(rng, p)]
+    constructors = [
+        μ -> MvNormal(μ, Symmetric(F * F' + Diagonal(D))),
+        μ -> MvNormal(μ, Diagonal(D)),
+        μ -> MvNormal(μ, 0.8),
+        μ -> LRDMvNormal(μ, F, D),
+        μ -> LatentMvNormal(μ, F, D, A_factor),
+    ]
+    for construct in constructors
+        cs = construct.(means)
+        mixture = MixtureModel(cs, [0.3, 0.7])
+        # Cover reordered outputs and both dense and structured marginal paths.
+        for outputs in ([4, 1], [6, 2, 5, 1])
+            posterior = predict(mixture, Float64[], Int[], outputs)
+            reference = MixtureModel(
+                [MvNormal(mean(c)[outputs], Symmetric(cov(c)[outputs, outputs])) for c in cs],
+                [0.3, 0.7],
+            )
+            @test probs(posterior) == probs(mixture)
+            @test mean(posterior) ≈ mean(reference)
+            @test cov(posterior) ≈ cov(reference)
+            @test logpdf(posterior, zeros(length(outputs))) ≈
+                logpdf(reference, zeros(length(outputs)))
+        end
+        @test_throws DimensionMismatch predict(mixture, [1.0], Int[], [2, 3])
+        @test_throws DimensionMismatch predict(mixture, Float64[], [1], [2, 3])
+
+        inputs, outputs, x = [3, 1], [6, 2], [0.2, -0.4]
+        posterior = predict(mixture, x, inputs, outputs)
+        evidence = [
+            pdf(MvNormal(mean(c)[inputs], Symmetric(cov(c)[inputs, inputs])), x)
+            for c in cs
+        ]
+        weights = probs(mixture) .* evidence
+        @test probs(posterior) ≈ weights / sum(weights)
+        for (c, conditional) in zip(cs, components(posterior))
+            Σ = cov(c)
+            gain = Σ[outputs, inputs] / Σ[inputs, inputs]
+            @test mean(conditional) ≈ mean(c)[outputs] + gain * (x - mean(c)[inputs])
+            @test cov(conditional) ≈ Σ[outputs, outputs] - gain * Σ[inputs, outputs]
+        end
+    end
+end
