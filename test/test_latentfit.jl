@@ -9,9 +9,7 @@ const SGMlatent = StructuredGaussianMixtures
     X=rand(rng, g, n)
     w=rand(rng, n)
     w/=sum(w)
-    C, H=zeros(p, r), zeros(r, r)
-    buffers=SGMlatent._LatentBuffers(p, r, n)
-    SGMlatent._latent_statistics!(C, H, g, X, zeros(p), w, buffers)
+    C, H=SGMlatent._latent_moments(g, X, w)
     A=latent_covariance(g)
     B=A*F'/cov(g)
     V=A-B*F*A
@@ -37,8 +35,7 @@ const SGMlatent = StructuredGaussianMixtures
         LatentCovariance(r),
         CovarianceEM(maxiter=1, variance_floor=0),
         [g, g2],
-        [X, other],
-        [zeros(p), zeros(p)],
+        k -> k==1 ? X : other,
         [w, w],
         [0.3, 0.7],
     )
@@ -122,8 +119,7 @@ const SGMlatent = StructuredGaussianMixtures
     # Orthogonal reparameterization of an A factor leaves posterior moments invariant.
     Q=Matrix(qr(randn(rng, r, r)).Q)
     rotated=LatentMvNormal(mean(g), g.F, g.D, g.A_factor*Q)
-    Cr, Hr=zeros(p, r), zeros(r, r)
-    SGMlatent._latent_statistics!(Cr, Hr, rotated, X, zeros(p), w, buffers)
+    Cr, Hr=SGMlatent._latent_moments(rotated, X, w)
     @test Cr ≈ C
     @test Hr ≈ H
     # Underflowed responsibilities exclude extreme observations before centering
@@ -141,35 +137,27 @@ const SGMlatent = StructuredGaussianMixtures
     @test isfinite(separated_state.report.objective)
 end
 
-@testset "Buffered latent moments and likelihood" begin
+@testset "Latent moments and stable likelihood" begin
     rng=MersenneTwister(913)
-    p, r, n=7, 3, 513 # Includes two full blocks and a final one-column block.
+    p, r, n=7, 3, 57
     g=LatentMvNormal(zeros(p), randn(rng, p, r), 0.2 .+ rand(rng, p), randn(rng, r, r))
     μ=randn(rng, p)
     storage=rand(rng, p, 2n)
-    X=view(storage, :, 1:2:2n)
+    # Exercise the moment equations on a noncontiguous centered-data view.
+    centered=storage .- μ
+    R=view(centered, :, 1:2:2n)
     w=rand(rng, n)
     w ./= sum(w)
-    R=X .- μ
     A=latent_covariance(g)
     B=A*g.F'/cov(g)
     Z=B*R
     expectedC=(R .* w')*Z'
     expectedH=A-B*g.F*A+(Z .* w')*Z'
     expected_score=dot(logpdf(MvNormal(zeros(p), Symmetric(cov(g))), R), w)
-    for blocksize in (17, 256)
-        buffers=SGMlatent._LatentBuffers(p, r, blocksize)
-        C, H=zeros(p, r), zeros(r, r)
-        value=SGMlatent._latent_statistics!(C, H, g, X, μ, w, buffers)
-        @test C ≈ expectedC
-        @test H ≈ expectedH
-        @test value ≈ expected_score
-        # Reusing the buffers and output arrays must replace old statistics.
-        value2=SGMlatent._latent_statistics!(C, H, g, X, μ, w, buffers)
-        @test C ≈ expectedC
-        @test H ≈ expectedH
-        @test value2 == value
-    end
+    C, H=SGMlatent._latent_moments(g, R, w)
+    @test C ≈ expectedC
+    @test H ≈ expectedH
+    @test SGMlatent._objective(g, R, w) ≈ expected_score
 
     # A high loading-to-noise ratio makes the subtractive Woodbury quadratic
     # inaccurate. Compare the residual-norm calculation to a dense BigFloat solve.
@@ -179,10 +167,7 @@ end
     strong=LatentMvNormal(zeros(p), F, D, factor)
     X=F*factor*randn(rng, r, 19)+sqrt.(D) .* randn(rng, p, 19)
     w=fill(1/size(X, 2), size(X, 2))
-    C, H=zeros(p, r), zeros(r, r)
-    value=SGMlatent._latent_statistics!(
-        C, H, strong, X, zeros(p), w, SGMlatent._LatentBuffers(p, r, size(X, 2))
-    )
+    value=SGMlatent._objective(strong, X, w)
     Q=BigFloat.(F)*BigFloat.(factor)
     chol=cholesky(Symmetric(Q*Q'+Diagonal(BigFloat.(D))))
     densequad=sum(

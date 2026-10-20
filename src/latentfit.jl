@@ -1,6 +1,6 @@
 # Shared-loading latent covariance EM. Posterior moments are computed without
-# forming an observation-space scatter matrix. The block statistics also support
-# future sharing patterns, but only shared F,D is exposed here.
+# forming an observation-space scatter matrix. Single-Gaussian and shared-F,D
+# mixture fitting use the same direct posterior-moment and M-step equations.
 function _check(s::LatentCovariance, m::CovarianceMethod, p)
     m isa CovarianceEM || throw(ArgumentError("LatentCovariance requires CovarianceEM"))
     return s.r <= p || throw(ArgumentError("latent rank exceeds observation dimension"))
@@ -60,96 +60,36 @@ function initialize(
     )
 end
 
-# Bounded scratch storage is reused across components and inner sweeps. In
-# particular, never materialize K centered copies of the observation matrix.
-struct _LatentBuffers
-    residual::Matrix{Float64}
-    whitened::Matrix{Float64}
-    posterior::Matrix{Float64}
-    weighted::Matrix{Float64}
-end
-function _LatentBuffers(p, r, n)
-    b=min(n, 256)
-    return _LatentBuffers(zeros(p, b), zeros(r, b), zeros(r, b), zeros(r, b))
-end
-
 # Work in whitened prior coordinates to avoid explicitly inverting A or D.
-# Accumulate moments and the observed covariance likelihood in the same pass.
-# The quadratic form uses ||D^(-1/2)(x-Qz)||² + ||z||², avoiding cancellation
-# between the two large terms of the Woodbury quadratic form.
-function _latent_statistics!(C, H, g::LatentMvNormal, X, μ, w, buffers)
+function _latent_moments(g::LatentMvNormal, R, w)
+    # z has covariance A. Work with z=A_factor*u, where u has identity covariance.
     Q=g.F*g.A_factor
-    scaled=Q ./ g.D
-    chol=cholesky(Symmetric(I+Q'*scaled))
-    H .= g.A_factor*(chol \ g.A_factor')
-    fill!(C, 0)
-    quad=0.0
-    block=size(buffers.residual, 2)
-    for firstcol in 1:block:size(X, 2)
-        cols=firstcol:min(firstcol + block - 1, size(X, 2))
-        b=length(cols)
-        R=view(buffers.residual, :, 1:b)
-        Zwhite=view(buffers.whitened, :, 1:b)
-        Z=view(buffers.posterior, :, 1:b)
-        weighted=view(buffers.weighted, :, 1:b)
-        @views R .= X[:, cols] .- μ
-        mul!(Zwhite, scaled', R)
-        ldiv!(chol, Zwhite)
-        mul!(Z, g.A_factor, Zwhite)
-        @views weighted .= Z .* w[cols]'
-        mul!(C, R, weighted', 1.0, 1.0)
-        mul!(H, weighted, Z', 1.0, 1.0)
-        mul!(R, Q, Zwhite, -1.0, 1.0)
-        for j in 1:b
-            q=0.0
-            @inbounds for i in axes(R, 1)
-                q += abs2(R[i, j])/g.D[i]
-            end
-            @inbounds for i in axes(Zwhite, 1)
-                q += abs2(Zwhite[i, j])
-            end
-            quad += w[cols[j]]*q
-        end
-    end
-    logdet=sum(log, g.D)+2sum(log, diag(chol.U))
-    return -0.5*(length(g)*log(2π)+logdet+quad)
+    chol=cholesky(Symmetric(I+Q'*(Q ./ g.D)))
+    posterior=g.A_factor*(chol \ (Q'*(R ./ g.D)))
+    V=g.A_factor*(chol \ g.A_factor')
+    C=(R .* w')*posterior'
+    H=Symmetric((posterior .* w')*posterior'+V)
+    return C, Matrix(H)
 end
-
-function _latent_variance(X, μ, w)
-    v=zeros(size(X, 1))
-    for j in axes(X, 2)
-        @inbounds for i in axes(X, 1)
-            v[i] += abs2(X[i, j]-μ[i])*w[j]
-        end
-    end
-    return v
-end
-function _joint_latent_covariance(s, m, current, data, means, weights, mass)
-    p, r=size(first(current).F)
-    gs=[LatentMvNormal(zeros(p), g.F, g.D, g.A_factor) for g in current]
-    variances=[_latent_variance(data[k], means[k], weights[k]) for k in eachindex(gs)]
-    moments=[(zeros(p, r), zeros(r, r)) for _ in gs]
-    buffers=_LatentBuffers(p, r, maximum(size(X, 2) for X in data))
-    function statistics!(models)
-        value=0.0
-        for k in eachindex(models)
-            C, H=moments[k]
-            value +=
-                mass[k]*_latent_statistics!(
-                    C, H, models[k], data[k], means[k], weights[k], buffers
-                )
-        end
-        isfinite(value) || throw(ArgumentError("nonfinite joint covariance objective"))
-        return value
-    end
+function _joint_latent_covariance(s, m, current, residual, weights, mass)
+    F=copy(first(current).F)
+    D=copy(first(current).D)
+    gs=[LatentMvNormal(zeros(size(F, 1)), F, D, g.A_factor) for g in current]
+    variances=[_variance(residual(k), weights[k]) for k in eachindex(current)]
+    objective(gs) =
+        sum(mass[k]*_objective(gs[k], residual(k), weights[k]) for k in eachindex(gs))
     report=FitReport(; kind=:covariance_loglikelihood)
-    previous=statistics!(gs)
+    previous=objective(gs)
+    isfinite(previous) || throw(ArgumentError("nonfinite joint covariance objective"))
     push!(report.history, previous)
     for iteration in 1:m.maxiter
+        # E-step: normalized posterior moments for each component.
+        moments=[_latent_moments(gs[k], residual(k), weights[k]) for k in eachindex(gs)]
+        # M-step: pool moments for shared F,D and update each latent A separately.
         cross=sum(mass[k]*moments[k][1] for k in eachindex(gs))
         second=sum(mass[k]*moments[k][2] for k in eachindex(gs))
         F=cross/cholesky(Symmetric(second))
-        D=zeros(p)
+        D=zeros(size(F, 1))
         factors=Matrix{Float64}[]
         for k in eachindex(gs)
             C, H=moments[k]
@@ -160,8 +100,9 @@ function _joint_latent_covariance(s, m, current, data, means, weights, mass)
             push!(factors, Matrix(cholesky(A).L))
         end
         D=max.(D, m.variance_floor)
-        gs=[LatentMvNormal(zeros(p), F, D, factor) for factor in factors]
-        value=statistics!(gs)
+        gs=[LatentMvNormal(zeros(size(F, 1)), F, D, factor) for factor in factors]
+        value=objective(gs)
+        isfinite(value) || throw(ArgumentError("nonfinite joint covariance objective"))
         push!(report.history, value)
         report.iterations=iteration
         if m.tol>0 && abs(value-previous)<=m.tol*(1+abs(previous))
@@ -176,9 +117,7 @@ function _joint_latent_covariance(s, m, current, data, means, weights, mass)
 end
 function _covariance(s::LatentCovariance, m::CovarianceEM, current, R, w)
     _validate_latent(s, current)
-    gs, report=_joint_latent_covariance(
-        s, m, [current], [R], [zeros(size(R, 1))], [w], [1.0]
-    )
+    gs, report=_joint_latent_covariance(s, m, [current], _ -> R, [w], [1.0])
     return only(gs), report
 end
 function _fit_components(
@@ -194,10 +133,9 @@ function _fit_components(
     weights=[
         component_weights[kept[k], k]/sum(component_weights[kept[k], k]) for k in 1:s.k
     ]
-    data=[view(X, :, indices) for indices in kept]
-    means=[_mean(data[k], weights[k]) for k in 1:s.k]
-    gs, report=_joint_latent_covariance(
-        s.covariance, m, current, data, means, weights, mass
-    )
+    means=[_mean(view(X, :, kept[k]), weights[k]) for k in 1:s.k]
+    # Center one component at a time; do not retain K full residual datasets.
+    residual=k -> view(X, :, kept[k]) .- means[k]
+    gs, report=_joint_latent_covariance(s.covariance, m, current, residual, weights, mass)
     return [_remean(gs[k], means[k]) for k in 1:s.k], [report]
 end

@@ -216,11 +216,13 @@ responsibilities and updated means stay fixed during an inner joint EM fit.
 Posterior latent first and second moments produce small sufficient statistics;
 loading updates pool those statistics, each `A_k` updates independently, and the
 residual diagonal pools expected squared residuals. No dense observation scatter
-matrix is formed. Centered observations are processed in bounded blocks, reusing
-scratch arrays across components and inner sweeps; the implementation does not
-store a centered dataset for each component. The posterior-moment pass also
-computes likelihood using a sum of squared residual and latent norms, avoiding
-the subtraction of two large Woodbury quadratic terms.
+matrix is formed. The implementation follows the posterior-moment and M-step
+matrix equations directly, in the same style as LRD `CovarianceEM`. It uses the
+existing `_variance` and `_objective` helpers; likelihood scoring already uses
+stable residual and latent squared norms. Centered observations are prepared one
+component at a time, but full sample-sized temporaries are allocated during each
+inner sweep. Buffer reuse and blocked accumulation are tracked in
+[the covariance EM performance follow-up](https://github.com/sisl/StructuredGaussianMixtures.jl/issues/34).
 
 For component mass ``m_k``, let ``C_k=E[xz^T]`` and ``H_k=E[zz^T]`` be normalized,
 responsibility-weighted posterior moments of centered observations. One inner EM
