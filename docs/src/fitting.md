@@ -10,13 +10,16 @@ Data matrices are **features × observations**. `fit` returns a fitted distribut
 |---|---|---|
 | `FullCovariance()` | `Exact()` alone, or `EM(covariance_method=Exact())` | `MvNormal` |
 | `DiagonalCovariance()` | `Exact()` alone, or `EM(covariance_method=Exact())` | diagonal `MvNormal` |
+| `IsotropicCovariance()` | `Exact()` alone, or `EM(covariance_method=Exact())` | isotropic `MvNormal` |
 | `LowRankDiagonal(r)` | `CovarianceEM()` alone, or `EM(covariance_method=CovarianceEM())` | `LRDMvNormal` |
 | `LatentCovariance(r)` | `CovarianceEM()` alone | `LatentMvNormal` |
 | `LatentCovariance(r)` in `MixtureSpec(...; tied=Tied(:F,:D))` | `EM(covariance_method=CovarianceEM())` or `PCAEM()` | `LatentMvNormal` components |
 
 `MixtureSpec(structure, k)` defaults to independent components. `Tied` describes
-constraints, not array aliasing. This release implements shared `F,D` only through
-PCAEM and joint covariance EM; other tied configurations are rejected explicitly. PCAEM additionally constrains means to an affine PCA subspace.
+constraints, not array aliasing. Full, diagonal, and isotropic structures support
+`Tied(:covariance)` with `EM(covariance_method=Exact())`. Shared `F,D` is supported
+through PCAEM and joint covariance EM; other tied configurations are rejected
+explicitly. PCAEM additionally constrains means to an affine PCA subspace.
 `LatentCovariance(r; latent=DiagonalCovariance())` requests diagonal reduced-space
 covariances; its default is full covariance. No one-to-one mapping between specs
 and distribution types is required (full and diagonal both use `MvNormal`).
@@ -24,6 +27,7 @@ and distribution types is required (full and diagonal both use `MvNormal`).
 ```@docs
 FullCovariance
 DiagonalCovariance
+IsotropicCovariance
 LowRankDiagonal
 LatentCovariance
 MixtureSpec
@@ -55,7 +59,8 @@ result.report.status, result.report.objective
 Single-Gaussian fitting estimates a weighted mean and calls the covariance solver
 directly, without mixture responsibilities or outer EM. Exact fitting reports one
 closed-form update. LRD reports its inner covariance iterations. The mixture M-step
-uses that same path for each component. Centered weighted observations are passed
+uses that same path for each independent component. Tied covariances instead use
+a joint solve, keeping component means separate. Centered weighted observations are passed
 to the covariance implementation; LRD never requires a dense scatter matrix.
 
 Weights must be finite and nonnegative with positive total mass; they are normalized.
@@ -229,5 +234,37 @@ Fitted components retain independently owned copies of equal F and D arrays,
 consistent with `LatentMvNormal` ownership. `workspace` validates those equalities,
 and joint updates preserve them. This release does not support separate D with
 shared F, separate F with shared D, or other partial-sharing combinations.
+## Isotropic and shared covariance
+
+```@example fitting
+isotropic = fit(IsotropicCovariance(), Exact(), X; weights=w)
+tied_spec = MixtureSpec(FullCovariance(), 3; tied=Tied(:covariance))
+tied_method = EM(covariance_method=Exact(regularization=1e-5), maxiter=10)
+tied_state = initialize(tied_spec, tied_method, X; weights=w, rng)
+tied_model = fit!(tied_state, tied_method, X; weights=w)
+length(tied_state.inner_reports) # one joint covariance report
+```
+
+Use `DiagonalCovariance()` or `IsotropicCovariance()` in the same mixture
+specification for a shared diagonal or scalar covariance. Component means and
+mixture weights remain independent. Each exact M-step pools the weighted scatter
+**around each component's updated mean**, divides by total mass, then projects to
+the requested covariance structure. Isotropic covariance is the average marginal
+variance times the identity. `Exact.regularization` adds a variance ridge once
+after pooling; it is not scaled by component mass.
+
+A tied M-step produces one inner covariance report, whose objective is the
+mass-weighted conditional Gaussian log likelihood (excluding mixture weights).
+The resulting components reuse one covariance representation. Treat fitted
+parameters as read-only: `workspace(spec, method, model)` copies the model and
+checks equality of its component covariances before continuation. Initialization
+and subsequent updates preserve the specified tying constraints.
+
+The internal `_fit_components(spec, covariance_method, components, X, weights)`
+operation is the joint M-step dispatch point. Its samples × components weight
+matrix contains effective observation weights; column sums retain component
+masses. Independent fitting delegates to single-Gaussian fitting, while tied
+methods combine statistics before normalizing. It returns components and inner
+reports, leaving responsibilities and outer convergence to the EM driver.
 If an inner covariance solver reports `:failed`, outer EM retains the last valid
 mixture and reports the inner failure instead of accepting that candidate.

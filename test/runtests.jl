@@ -11,3 +11,4 @@ include("test_latentmvnormal.jl")
 include("test_structured_interface.jl")
 
 include("test_latentfit.jl")
+include("test_tied_exact.jl")

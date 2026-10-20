@@ -25,7 +25,12 @@ include("pca.jl")
 include("latentfit.jl")
 export fit, fit!, initialize, workspace, responsibilities
 export FullCovariance,
-    DiagonalCovariance, LowRankDiagonal, LatentCovariance, MixtureSpec, Tied
+    DiagonalCovariance,
+    IsotropicCovariance,
+    LowRankDiagonal,
+    LatentCovariance,
+    MixtureSpec,
+    Tied
 export Exact, CovarianceEM, EM, PCAEM, KMeansInit, RandomInit, RandomLoading
 export FitReport, GaussianWorkspace, MixtureWorkspace, PCAWorkspace
 
