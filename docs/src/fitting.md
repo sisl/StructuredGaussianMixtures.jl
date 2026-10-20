@@ -97,7 +97,8 @@ by `fit!` are the current fitted snapshot. Workspace fields are implementation d
 positive-weight observations. Empty clusters retain their previous center.
 `RandomInit()` uses those selected observations directly. Both initialize covariances
 from global weighted data and equal mixture masses. `RandomLoading()` initializes
-small nonzero LRD loadings; zero loadings would be a stationary point of covariance EM.
+small nonzero LRD or latent loadings, with latent `A=I`; zero loadings would be a
+stationary point of covariance EM. It is a random starting point, not a PCA fit.
 Use explicit `rng` for reproducibility; continuation does not consume randomness.
 
 ```@docs
@@ -194,7 +195,7 @@ Distribution operations retain the PR1 interfaces described in the Gaussian guid
 mixture with exactly `Tied(:F, :D)`. Component means and latent covariances remain
 independent; the loading and diagonal residual variances are learned jointly.
 
-```julia
+```@example fitting
 spec = MixtureSpec(LatentCovariance(3), 4; tied=Tied(:F, :D))
 method = EM(covariance_method=CovarianceEM(maxiter=5), maxiter=50)
 state = initialize(spec, method, X; rng)
@@ -215,12 +216,37 @@ responsibilities and updated means stay fixed during an inner joint EM fit.
 Posterior latent first and second moments produce small sufficient statistics;
 loading updates pool those statistics, each `A_k` updates independently, and the
 residual diagonal pools expected squared residuals. No dense observation scatter
-matrix is formed. Centered observations are processed one component at a time.
+matrix is formed. Centered observations are processed in bounded blocks, reusing
+scratch arrays across components and inner sweeps; the implementation does not
+store a centered dataset for each component. The posterior-moment pass also
+computes likelihood using a sum of squared residual and latent norms, avoiding
+the subtraction of two large Woodbury quadratic terms.
+
+For component mass ``m_k``, let ``C_k=E[xz^T]`` and ``H_k=E[zz^T]`` be normalized,
+responsibility-weighted posterior moments of centered observations. One inner EM
+sweep updates
+
+```math
+F_{new}=\left(\sum_k m_k C_k\right)\left(\sum_k m_k H_k\right)^{-1},
+\qquad A_{k,new}=H_k.
+```
+
+For diagonal latent covariance, replace ``H_k`` by its diagonal in the ``A_k``
+update. The shared residual variance is the mass-weighted diagonal of
+``E[(x-F_{new}z)(x-F_{new}z)^T]``, clipped at `variance_floor`. The implementation
+uses small Cholesky solves, not explicit inverses. These are ordinary latent
+variable EM updates for the observed-space likelihood with fixed responsibilities;
+there is no separate optimizer or ADMM loop.
 
 `state.inner_reports` contains **one joint covariance report**, whose history is
 the component-mass-weighted covariance log likelihood. It is not a per-component
 report. One inner sweep already constitutes a generalized EM update; `maxiter`
-controls additional covariance optimization. `variance_floor` applies to D, not A.
+controls the maximum number of inner sweeps **per outer M-step**. Start with a small
+inner budget, inspect `inner_reports`, and use continuation or a larger budget when
+needed; fully converging every inner fit can waste work while responsibilities are
+still changing. Each new M-step starts from the current parameters. The default
+remains 20 sweeps; no automatic schedule or acceleration is applied.
+`variance_floor` applies to D, not A.
 Latent covariance factors are fitted with positive-definite A; continuation rejects
 singular A even though `LatentMvNormal` can represent it for other operations.
 
@@ -228,12 +254,16 @@ Unlike PCAEM, this method learns F and D through the observed likelihood and doe
 not constrain means to the initial PCA affine subspace. Full latent covariance has
 nonunique coordinates: simultaneous transformations of F and A can preserve the
 observation covariance. No coordinate normalization is imposed; compare covariance
-and likelihood, rather than individual loading entries, across runs.
+and likelihood, rather than individual loading entries, across runs. EM reaches
+stationary points and may converge slowly; neither `:converged` nor a fixed
+iteration budget guarantees the global mixture optimum. Use explicit seeds and
+`n_init` to assess different starts.
 
 Fitted components retain independently owned copies of equal F and D arrays,
 consistent with `LatentMvNormal` ownership. `workspace` validates those equalities,
 and joint updates preserve them. This release does not support separate D with
 shared F, separate F with shared D, or other partial-sharing combinations.
+
 ## Isotropic and shared covariance
 
 ```@example fitting

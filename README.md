@@ -35,7 +35,7 @@ state.report
 - `LatentCovariance(r)` with `Tied(:F,:D)` supports joint
   `EM(covariance_method=CovarianceEM())`, learning shared loadings and residual noise,
   or `PCAEM(latent_method=EM(...))` for a fixed PCA projection.
-  It retains the PCA loading and component latent covariances in `LatentMvNormal`.
+  Both return `LatentMvNormal` components with explicit shared `F` and component latent covariances.
 - All fitting paths accept `weights=...` and fresh fits accept `rng=...`.
 - Native `EM` provides convergence reports, restarts and weighted updates.
   `responsibilities(gmm, X)` returns posterior membership probabilities;

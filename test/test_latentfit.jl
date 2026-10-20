@@ -9,7 +9,9 @@ const SGMlatent = StructuredGaussianMixtures
     X=rand(rng, g, n)
     w=rand(rng, n)
     w/=sum(w)
-    C, H=SGMlatent._latent_moments(g, X, w)
+    C, H=zeros(p, r), zeros(r, r)
+    buffers=SGMlatent._LatentBuffers(p, r, n)
+    SGMlatent._latent_statistics!(C, H, g, X, zeros(p), w, buffers)
     A=latent_covariance(g)
     B=A*F'/cov(g)
     V=A-B*F*A
@@ -35,7 +37,8 @@ const SGMlatent = StructuredGaussianMixtures
         LatentCovariance(r),
         CovarianceEM(maxiter=1, variance_floor=0),
         [g, g2],
-        k -> k==1 ? X : other,
+        [X, other],
+        [zeros(p), zeros(p)],
         [w, w],
         [0.3, 0.7],
     )
@@ -119,7 +122,8 @@ const SGMlatent = StructuredGaussianMixtures
     # Orthogonal reparameterization of an A factor leaves posterior moments invariant.
     Q=Matrix(qr(randn(rng, r, r)).Q)
     rotated=LatentMvNormal(mean(g), g.F, g.D, g.A_factor*Q)
-    Cr, Hr=SGMlatent._latent_moments(rotated, X, w)
+    Cr, Hr=zeros(p, r), zeros(r, r)
+    SGMlatent._latent_statistics!(Cr, Hr, rotated, X, zeros(p), w, buffers)
     @test Cr ≈ C
     @test Hr ≈ H
     # Underflowed responsibilities exclude extreme observations before centering
@@ -135,4 +139,92 @@ const SGMlatent = StructuredGaussianMixtures
     fit!(separated_state, separated_method, extremes)
     @test separated_state.report.status==:iteration_limit
     @test isfinite(separated_state.report.objective)
+end
+
+@testset "Buffered latent moments and likelihood" begin
+    rng=MersenneTwister(913)
+    p, r, n=7, 3, 513 # Includes two full blocks and a final one-column block.
+    g=LatentMvNormal(zeros(p), randn(rng, p, r), 0.2 .+ rand(rng, p), randn(rng, r, r))
+    μ=randn(rng, p)
+    storage=rand(rng, p, 2n)
+    X=view(storage, :, 1:2:2n)
+    w=rand(rng, n)
+    w ./= sum(w)
+    R=X .- μ
+    A=latent_covariance(g)
+    B=A*g.F'/cov(g)
+    Z=B*R
+    expectedC=(R .* w')*Z'
+    expectedH=A-B*g.F*A+(Z .* w')*Z'
+    expected_score=dot(logpdf(MvNormal(zeros(p), Symmetric(cov(g))), R), w)
+    for blocksize in (17, 256)
+        buffers=SGMlatent._LatentBuffers(p, r, blocksize)
+        C, H=zeros(p, r), zeros(r, r)
+        value=SGMlatent._latent_statistics!(C, H, g, X, μ, w, buffers)
+        @test C ≈ expectedC
+        @test H ≈ expectedH
+        @test value ≈ expected_score
+        # Reusing the buffers and output arrays must replace old statistics.
+        value2=SGMlatent._latent_statistics!(C, H, g, X, μ, w, buffers)
+        @test C ≈ expectedC
+        @test H ≈ expectedH
+        @test value2 == value
+    end
+
+    # A high loading-to-noise ratio makes the subtractive Woodbury quadratic
+    # inaccurate. Compare the residual-norm calculation to a dense BigFloat solve.
+    F=1e4 .* randn(rng, p, r)
+    D=fill(1e-3, p)
+    factor=randn(rng, r, r)
+    strong=LatentMvNormal(zeros(p), F, D, factor)
+    X=F*factor*randn(rng, r, 19)+sqrt.(D) .* randn(rng, p, 19)
+    w=fill(1/size(X, 2), size(X, 2))
+    C, H=zeros(p, r), zeros(r, r)
+    value=SGMlatent._latent_statistics!(
+        C, H, strong, X, zeros(p), w, SGMlatent._LatentBuffers(p, r, size(X, 2))
+    )
+    Q=BigFloat.(F)*BigFloat.(factor)
+    chol=cholesky(Symmetric(Q*Q'+Diagonal(BigFloat.(D))))
+    densequad=sum(
+        BigFloat(w[j])*dot(BigFloat.(X[:, j]), chol\BigFloat.(X[:, j])) for j in axes(X, 2)
+    )
+    expected=-0.5*(p*log(2big(π))+logdet(chol)+densequad)
+    @test value ≈ Float64(expected) rtol=1e-8 atol=1e-8
+end
+
+@testset "Joint latent weighted updates and floors" begin
+    rng=MersenneTwister(119)
+    p, r, n=5, 2, 81
+    F=randn(rng, p, r)
+    D=fill(2.0, p)
+    start=MixtureModel(
+        [
+            LatentMvNormal(randn(rng, p), F, D, Matrix{Float64}(I, r, r)),
+            LatentMvNormal(randn(rng, p), F, D, 2 .* Matrix{Float64}(I, r, r)),
+        ],
+        [0.2, 0.8],
+    )
+    X=rand(rng, start, n)
+    counts=rand(rng, 1:4, n)
+    ids=reduce(vcat, [fill(j, counts[j]) for j in 1:n])
+    spec=MixtureSpec(LatentCovariance(r), 2; tied=Tied(:F, :D))
+    method=EM(
+        covariance_method=CovarianceEM(maxiter=4, tol=0, variance_floor=2.0),
+        maxiter=3,
+        tol=0,
+    )
+    weighted=workspace(spec, method, start)
+    repeated=workspace(spec, method, start)
+    fit!(weighted, method, X; weights=counts)
+    fit!(repeated, method, X[:, ids])
+    @test weighted.report.status==:iteration_limit
+    @test weighted.report.history ≈ repeated.report.history
+    @test all(diff(weighted.report.history) .>= -1e-9)
+    @test all(diff(only(weighted.inner_reports).history) .>= -1e-9)
+    @test probs(weighted.model) ≈ probs(repeated.model)
+    for (a, b) in zip(components(weighted.model), components(repeated.model))
+        @test mean(a) ≈ mean(b)
+        @test cov(a) ≈ cov(b)
+        @test all(diagonal(a) .>= 2.0)
+    end
 end

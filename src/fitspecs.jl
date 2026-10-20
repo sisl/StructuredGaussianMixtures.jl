@@ -25,7 +25,7 @@ struct LatentCovariance{S<:GaussianStructure} <: GaussianStructure
         return new{typeof(latent)}(r, latent)
     end
 end
-"""Declare shared parameter names, e.g. `Tied(:F, :D)` for PCAEM."""
+"""Declare shared parameter names, e.g. `Tied(:F, :D)` for latent mixtures."""
 struct Tied
     parameters::Tuple{Vararg{Symbol}}
     function Tied(parameters::Symbol...)
@@ -58,7 +58,7 @@ struct KMeansInit <: Initialization
 end
 """Choose mixture centers from observations, proportional to observation weights."""
 struct RandomInit <: Initialization end
-"""Initialize an LRD covariance from a small nonzero random loading and marginal variances."""
+"""Initialize low-rank or latent covariance from a small random loading and marginal variances."""
 struct RandomLoading <: Initialization end
 """Weighted covariance MLE, with an optional additive diagonal ridge."""
 struct Exact <: CovarianceMethod
