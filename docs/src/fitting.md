@@ -11,8 +11,13 @@ Data matrices are **features × observations**. `fit` returns a fitted distribut
 | `FullCovariance()` | `Exact()` alone, or `EM(covariance_method=Exact())` | `MvNormal` |
 | `DiagonalCovariance()` | `Exact()` alone, or `EM(covariance_method=Exact())` | diagonal `MvNormal` |
 | `IsotropicCovariance()` | `Exact()` alone, or `EM(covariance_method=Exact())` | isotropic `MvNormal` |
+| [`BandedPrecision(b)`](bandedprecision.md) | `Exact()` alone, or independent `EM(covariance_method=Exact())` | `BandedPrecisionMvNormal` |
 | `LowRankDiagonal(r)` | `CovarianceEM()` alone, or `EM(covariance_method=CovarianceEM())` | `LRDMvNormal` |
 | `LatentCovariance(r)` in `MixtureSpec(...; tied=Tied(:F,:D))` | `PCAEM()` | `LatentMvNormal` components |
+
+Banded precision fitting supports independent components; tied fitting is not
+implemented. Its regularization modifies the empirical scatter, as detailed in
+the [banded precision guide](bandedprecision.md).
 
 `MixtureSpec(structure, k)` defaults to independent components. `Tied` describes
 constraints, not array aliasing. Full, diagonal, and isotropic structures support
