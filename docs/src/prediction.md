@@ -23,6 +23,12 @@ predict(gmm, x; input_indices=1:length(x), output_indices=length(x)+1:length(gmm
 - `input_indices`: Indices of observed dimensions (default: `1:length(x)`)
 - `output_indices`: Indices of dimensions to predict (default: `length(x)+1:length(gmm)`)
 
+With no observed dimensions, `predict(gmm, Float64[]; input_indices=Int[],
+output_indices=[2, 4])` returns the marginal mixture over dimensions 2 and 4.
+Its component weights are unchanged. This also works for structured Gaussian
+components, without constructing a zero-dimensional Gaussian to score the evidence.
+The observed values and input indices must always have the same length.
+
 ## Basic Usage
 
 ```julia
