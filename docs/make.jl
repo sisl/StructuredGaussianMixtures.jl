@@ -13,6 +13,7 @@ makedocs(;
             "Fitting" => "fitting.md",
             "Structured Gaussians" => "lrdmvnormal.md",
             "Latent Gaussians" => "latentmvnormal.md",
+            "Banded Precision" => "bandedprecision.md",
         ],
         "Prediction" => "prediction.md",
         "Examples" => "examples.md",
