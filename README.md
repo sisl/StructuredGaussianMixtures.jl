@@ -31,8 +31,11 @@ state.report
 - `FullCovariance()`, `DiagonalCovariance()`, and `IsotropicCovariance()` use `Exact()` covariance updates.
   Add `tied=Tied(:covariance)` to `MixtureSpec` for one shared covariance with separate component means.
 - `LowRankDiagonal(r)` uses `CovarianceEM()` without forming a dense covariance.
-- `LatentCovariance(r)` with `Tied(:F,:D)` uses `PCAEM(latent_method=EM(...))`.
-  It retains the PCA loading and component latent covariances in `LatentMvNormal`.
+- `LatentCovariance(r)` supports single-Gaussian `CovarianceEM()` fitting.
+- `LatentCovariance(r)` with `Tied(:F,:D)` supports joint
+  `EM(covariance_method=CovarianceEM())`, learning shared loadings and residual noise,
+  or `PCAEM(latent_method=EM(...))` for a fixed PCA projection.
+  Both return `LatentMvNormal` components with explicit shared `F` and component latent covariances.
 - All fitting paths accept `weights=...` and fresh fits accept `rng=...`.
 - Native `EM` provides convergence reports, restarts and weighted updates.
   `responsibilities(gmm, X)` returns posterior membership probabilities;
